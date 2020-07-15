@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>top.totoro.sql</groupId>
+    <artifactId>clap-sql</artifactId>
+    <version>1.0.0</version>
+    <description>
+        ClapSQL：
+        C : Client（客户端场景）；
+        L : Light（轻量级）；
+        A : Almighty（全能，SQL的所有操作、自带缓存+批处理等）；
+        P : Performance（性能，自带分表，封装或解析可以不用反射）。
+        ClapSQL是一个适用于客户端的即轻量又全能且高效的数据库。
+
+        1. 不需要写任何的SQL语句，而是以写代码的方式处理数据库。
+           也许之后会考虑用APT+注解的方式，但不一定比写函数来的直观。
+
+        2. 可以通过给每个表设置一个关键字段，从而达到分表存储的效果，
+           分表的原理为哈希映射，使用的时候这个分表的过程是不需要任何配置的。
+
+        3. 可以使用批处理的方式异步执行命令，并且可以指定在异步执行完命令后执行其它逻辑。
+           批处理就是一次性执行多个数据库命令，减少IO。
+
+        4. 可以自定义表中存入一行数据的封装方式和取出一行数据的解析方式。
+           如果这个过程你不用json封装、解析对象的话，可以减少很多反射带来的性能影响。
+           而且一般表结构不复杂的情况下，自己决定怎么组装数据是方便且提高性能的。
+    </description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.google.code.gson</groupId>
+            <artifactId>gson</artifactId>
+            <version>2.8.6</version>
+        </dependency>
+    </dependencies>
+</project>
