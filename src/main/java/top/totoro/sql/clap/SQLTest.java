@@ -7,8 +7,8 @@ public class SQLTest {
 
     public static void main(String[] args) {
         String table = "test";
-        /* 创建数据库服务 */
-        Service service = new Service("D:\\common\\local\\sql");
+        /* 创建数据库服务，TODO：根据自己的电脑设置数据库地址 */
+        Service service = new Service("E:\\IDEA\\IdeaWorkSpace\\ClapSQL\\src\\main\\java\\top\\totoro\\sql\\clap\\db");
         /* 删除test表 */
         Log.d(TAG,"delete table " + service.dropTable(table));
         /* 创建test表 */
