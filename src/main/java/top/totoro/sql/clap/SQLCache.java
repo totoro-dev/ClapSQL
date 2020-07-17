@@ -16,9 +16,15 @@ public class SQLCache<Bean extends SQLBean> {
     // 用于最久未使用规则的tableFilePath列表表，最久没被访问的tableFile会出现在列表的最后面，清除缓存时优先清除。
     private final LinkedList<String> LRU_KEYS = new LinkedList<>();
     // 允许缓存中bean数量的最大值
-    private final int maxCachingSize = 0xfff;
+    private final int maxCachingSize = 0x4f;
     // 当前缓存中bean的数量
     private int currentCachingSize = 0;
+
+    private SQLService<Bean> sqlService;
+
+    public SQLCache(SQLService<Bean> sqlService) {
+        this.sqlService = sqlService;
+    }
 
     /**
      * 插入一条缓存数据。
@@ -33,7 +39,7 @@ public class SQLCache<Bean extends SQLBean> {
         if (cachingList.contains(beanToCaching)) return false;
         cachingList.add(beanToCaching);
         currentCachingSize++;
-        Log.d("SQLCache", "putToCaching success bean = " + beanToCaching.getKey());
+//        Log.d("SQLCache", "putToCaching success bean = " + beanToCaching.getKey());
         return true;
     }
 
@@ -45,7 +51,7 @@ public class SQLCache<Bean extends SQLBean> {
      * @return 插入并缓存成功
      */
     public boolean putToCaching(String tableSubFilePath, List<Bean> listToCaching) {
-        assert listToCaching != null;
+        assert listToCaching != null && tableSubFilePath != null;
         refreshLRU(tableSubFilePath);
         List<Bean> cachingList = CACHING.get(tableSubFilePath);
         if (cachingList == null) {
@@ -58,7 +64,7 @@ public class SQLCache<Bean extends SQLBean> {
                 currentCachingSize++;
             }
         }
-        Log.d("SQLCache", "putToCaching list size = " + listToCaching.size());
+//        Log.d("SQLCache", "putToCaching list size = " + listToCaching.size());
         return true;
     }
 
@@ -67,7 +73,7 @@ public class SQLCache<Bean extends SQLBean> {
         return Objects.hash(maxCachingSize);
     }
 
-    private void refreshLRU(String tableSubFilePath) {
+    private synchronized void refreshLRU(String tableSubFilePath) {
         LRU_KEYS.remove(tableSubFilePath);
         // 将当前的tableFilePath放到最前的位置，表示是最近使用的
         LRU_KEYS.add(0, tableSubFilePath);
@@ -82,9 +88,13 @@ public class SQLCache<Bean extends SQLBean> {
             LinkedList<String> copyKeys = new LinkedList<>(LRU_KEYS);
             for (int i = copyKeys.size() - 1; i >= 0 && currentCachingSize > maxCachingSize; i--) {
                 String key = copyKeys.get(i);
+                if (key == null) continue;
                 List<Bean> cachingList = CACHING.get(key);
+                if (cachingList == null) continue;
                 CACHING.remove(key);
                 LRU_KEYS.remove(key);
+                // 这里将缓存中的数据刷新到表文件中，确保数据已在缓存中但是还没有写入表文件的情况下表文件是稳定的。
+//                sqlService.refreshTable(new File(key), cachingList);
                 currentCachingSize -= cachingList.size();
             }
         }
@@ -107,39 +117,5 @@ public class SQLCache<Bean extends SQLBean> {
         if (caching == null) return null;
         refreshLRU(tableSubFilePath);
         return caching;
-    }
-
-    public static void main(String[] args) {
-        SQLCache cache = new SQLCache();
-        for (int i = 0; i < 100; i++) {
-            cache.putToCaching(i % 10 + "", new TestBean(i + ""));
-            Log.d("SQLCache", "currentCachingSize = " + cache.currentCachingSize + ", INSERT_CACHING size = " + cache.CACHING.size());
-        }
-
-    }
-
-    static class TestBean extends SQLBean {
-
-        String key;
-
-        public TestBean(String key) {
-            this.key = key;
-        }
-
-        @Override
-        void setKey(String key) {
-
-        }
-
-        @Override
-        String getKey() {
-            return key;
-        }
-
-        @Override
-        boolean isSame(Object another) {
-            if (another == this) return true;
-            return key.equals(((SQLCache.TestBean) another).getKey());
-        }
     }
 }

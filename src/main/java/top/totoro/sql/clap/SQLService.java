@@ -4,7 +4,6 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-
 /**
  * 创建时间 2020/7/8 22:50
  *
@@ -20,7 +19,7 @@ public abstract class SQLService<Bean extends SQLBean> {
     public static final int maxTableFiles = 0xff;                   // 一个表中允许最多多少个子表，用于对key进行分表
     private static final String ROW_END = " ~end";
     public static final String ROW_SEPARATOR = ROW_END + System.getProperty("line.separator");  // 换行符
-    private final SQLCache<Bean> sqlCache = new SQLCache();
+    private final SQLCache<Bean> sqlCache;
     private String tableName;
 
 //    private static final Map<String,>
@@ -28,6 +27,7 @@ public abstract class SQLService<Bean extends SQLBean> {
 
     public SQLService(String dbPath) {
         this.dbPath = dbPath;
+        sqlCache = new SQLCache(this);
     }
 
     /**
@@ -66,7 +66,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             if (!tableRootFile.exists() || !tableRootFile.isDirectory()) {
                 // 创建表目录
                 tableRootFile.mkdirs();
-                Log.d(TAG, "mkdirs() path = " + tableRootPath);
+                Log.d(TAG, "createTable mkdirs() path = " + tableRootPath);
             }
         } catch (Exception e) {
             return false;
@@ -80,7 +80,7 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param tableFile 表文件
      * @return 所有的行
      */
-    private LinkedList<Bean> getTableFileBeans(File tableFile) {
+    protected LinkedList<Bean> getTableFileBeans(File tableFile) {
         LinkedList<Bean> beanLines = new LinkedList<>();
         try (FileReader reader = new FileReader(tableFile); BufferedReader bufferedReader = new BufferedReader(reader)) {
             String line, row = "";
@@ -109,7 +109,7 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param id    关键字段某一行数据的key的唯一id
      * @return 表中唯一id值为id的子表的表文件，不存在该子表则创建它
      */
-    private File getSubTableFileOrCreate(String table, Long id) {
+    protected File getSubTableFileOrCreate(String table, Long id) {
         // 确定表是否存在
         String tableRootPath = dbPath + File.separator + table;
         File tableRootFile = new File(tableRootPath);
@@ -149,12 +149,12 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param id    关键字段的唯一id
      * @return 存在的子表文件
      */
-    private File getSubTableFile(String table, Long id) {
+    protected File getSubTableFile(String table, Long id) {
         // 确定表是否存在
         String tableRootPath = dbPath + File.separator + table;
         File tableRootFile = new File(tableRootPath);
         if (!tableRootFile.exists() || !tableRootFile.isDirectory()) {
-            Log.d(TAG, "getSubTableFile(table: " + table + "id: " + id + ") failed: parent table not exist, please create table first.");
+            Log.e(TAG, "getSubTableFile(table: " + table + "id: " + id + ") failed: parent table not exist, please create table first.");
             return null;
         }
 
@@ -170,7 +170,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         String tableFilePath = tableRootPath + File.separator + fileName + tableFileSuffix;
         File tableFile = new File(tableFilePath);
         if (!tableFile.exists()) {
-            Log.d(TAG, "getSubTableFile(table: " + table + "id: " + id + ") failed: sub table file " + fileName + tableFileSuffix + " not exist.");
+            Log.e(TAG, "getSubTableFile(table: " + table + "id: " + id + ") failed: sub table file " + fileName + tableFileSuffix + " not exist.");
             return null;
         }
         return tableFile;
@@ -184,12 +184,12 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param id    关键字段的唯一id
      * @return 存在的子表文件
      */
-    private File[] getAllSubTableFile(String table) {
+    protected File[] getAllSubTableFile(String table) {
         // 确定表是否存在
         String tableRootPath = dbPath + File.separator + table;
         File tableRootFile = new File(tableRootPath);
         if (!tableRootFile.exists() || !tableRootFile.isDirectory()) {
-            Log.d(TAG, "getAllSubTableFile(table: " + table + ") failed: parent table not exist, please create table first.");
+            Log.e(TAG, "getAllSubTableFile(table: " + table + ") failed: parent table not exist, please create table first.");
             return null;
         }
 
@@ -200,7 +200,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             }
         });
         if (subTableFiles == null) {
-            Log.d(TAG, "getAllSubTableFile(table: " + table + ") failed: sub table file not exist.");
+            Log.e(TAG, "getAllSubTableFile(table: " + table + ") failed: sub table file not exist.");
             return null;
         }
         return subTableFiles;
@@ -212,15 +212,15 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param tableFile    表文件
      * @param beansInTable 表的最新内容
      */
-    private void refreshTable(File tableFile, List<Bean> beansInTable) {
-        StringBuilder newKeysInfo = new StringBuilder();
+    protected void refreshTable(File tableFile, List<Bean> beansInTable) {
+        StringBuilder newTableInfo = new StringBuilder();
         beansInTable.forEach(b -> {
             if (b == null) return;
-            newKeysInfo.append(encoderRow(b) + ROW_SEPARATOR);
+            newTableInfo.append(encoderRow(b) + ROW_SEPARATOR);
         });
         try (FileWriter fileWriter = new FileWriter(tableFile, false)) {
-            fileWriter.write(newKeysInfo.toString());
-            Log.d(TAG, "tableFile = " + tableFile.getAbsolutePath());
+            fileWriter.write(newTableInfo.toString());
+//            Log.d(TAG, "refreshTable tableFile = " + tableFile.getAbsolutePath());
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -245,6 +245,27 @@ public abstract class SQLService<Bean extends SQLBean> {
         return true;
     }
 
+    /**
+     * 向确定的表文件中插入数据，用于批处理任务。
+     *
+     * @param tableFile
+     * @param rows
+     * @return
+     */
+    protected synchronized boolean insert(File tableFile, List<Bean> rows) {
+        assert !rows.isEmpty();
+        assert tableFile != null;
+        List<Bean> beans = getTableFileBeans(tableFile);
+        for (Bean row : rows) {
+            if (!beans.contains(row)) {
+                beans.add(row);
+            }
+        }
+        refreshTable(tableFile, beans);
+        sqlCache.putToCaching(tableFile.getAbsolutePath(), rows);
+        return true;
+    }
+
     public Bean selectByKey(String tableName, String key) {
         assert key != null;
         File tableFile = getSubTableFile(tableName, getKeyId(key));
@@ -261,10 +282,10 @@ public abstract class SQLService<Bean extends SQLBean> {
         return caching;
     }
 
-    public List<Bean> selectByCondition(String tableName, Condition<Bean> condition) {
+    public ArrayList<Bean> selectByCondition(String tableName, Condition<Bean> condition) {
         assert condition != null;
         File[] tableFiles = getAllSubTableFile(tableName);
-        List<Bean> allBeans = new ArrayList<>();
+        ArrayList<Bean> allBeans = new ArrayList<>();
         for (File tableFile : tableFiles) {
             // 需要一个一个子表的去查找
             List<Bean> beans = getTableFileBeans(tableFile);
@@ -288,6 +309,30 @@ public abstract class SQLService<Bean extends SQLBean> {
             allBeans.addAll(beans);
         }
         return allBeans;
+    }
+
+    /**
+     * 确定子表文件时直接更新表，批处理任务可用。
+     *
+     * @param tableFile
+     * @param allBeans
+     * @param acceptBeans
+     * @return
+     */
+    protected boolean update(File tableFile, List<Bean> allBeans, List<Bean> acceptBeans) {
+        assert tableFile != null;
+        refreshTable(tableFile, allBeans);
+        List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
+        if (caching != null) {
+            // 需要更新缓存中的这些匹配更新条件的bean
+            for (Bean acceptBean : acceptBeans) {
+                caching.remove(acceptBean);
+            }
+            caching.addAll(acceptBeans);
+        } else {
+            sqlCache.putToCaching(tableFile.getAbsolutePath(), acceptBeans);
+        }
+        return true;
     }
 
     public boolean updateByKey(String tableName, Bean update) {
@@ -345,6 +390,18 @@ public abstract class SQLService<Bean extends SQLBean> {
                 }
             }
             refreshTable(tableFile, beans);
+        }
+        return true;
+    }
+
+    public boolean delete(File tableFile, List<Bean> subTableBeans, List<Bean> acceptBeans) {
+        refreshTable(tableFile, subTableBeans);
+        List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
+        if (caching != null) {
+            // 需要删除缓存中的这些匹配删除条件的bean
+            for (Bean acceptBean : acceptBeans) {
+                caching.remove(acceptBean);
+            }
         }
         return true;
     }
