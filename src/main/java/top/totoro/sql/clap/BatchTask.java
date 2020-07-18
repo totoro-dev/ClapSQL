@@ -1,6 +1,7 @@
 package top.totoro.sql.clap;
 
 import java.io.Serializable;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.Callable;
@@ -27,6 +28,7 @@ public class BatchTask<Respond extends Serializable> {
         INSERT, UPDATE, DELETE, SELECT,
     }
 
+    private String mTableName = "";
     // 用于处理任务
     private Callable<Respond> mTask;
     // 当前任务的处理模式
@@ -36,6 +38,10 @@ public class BatchTask<Respond extends Serializable> {
     // 当前任务的执行结果
     private ScheduledFuture<Respond> mRespondFuture;
     private Respond mRespond;
+
+    public void setTableName(String tableName) {
+        this.mTableName = tableName;
+    }
 
     public Callable<Respond> getTask() {
         return mTask;
@@ -68,25 +74,31 @@ public class BatchTask<Respond extends Serializable> {
     public BatchTask() {
     }
 
-    public BatchTask(Callable<Respond> mTask, BatchMode mMode, long mDelay) {
-        this.mTask = mTask;
-        this.mMode = mMode;
-        this.mDelay = mDelay;
+    public BatchTask(BatchMode mode) {
+        this.mMode = mode;
+    }
+
+    public BatchTask(String tableName, Callable<Respond> task, BatchMode mode, long delay) {
+        this.mTableName = tableName;
+        this.mTask = task;
+        this.mMode = mode;
+        this.mDelay = delay;
     }
 
     /* 正式开启批处理，可以链式调用继续异步执行then方法 */
-    public BatchTask<Respond> start(Callable<Respond> task, BatchMode mode, long delay) {
+    public BatchTask<Respond> start(String tableName, Callable<Respond> task, BatchMode mode, long delay) {
+        mTableName = tableName;
         mTask = task;
         mMode = mode;
         mDelay = delay;
-        mRespondFuture = SCHEDULED_EXECUTOR.schedule(mTask, mDelay, TimeUnit.MILLISECONDS);
-        return this;
+        return start();
     }
 
     /* 正式开启批处理，可以链式调用继续异步执行then方法 */
     public BatchTask<Respond> start() {
         assert mTask != null;
-        BATCH_PRIORITY_MAP.computeIfAbsent(getMode(), key -> new LinkedList<>()).add(this);
+        HashMap<BatchMode, LinkedList<BatchTask<? extends Serializable>>> tableTaskMap = BATCH_PRIORITY_MAP.computeIfAbsent(mTableName, key -> new HashMap<>());
+        tableTaskMap.computeIfAbsent(getMode(), table -> new LinkedList<>()).add(this);
         mRespondFuture = SCHEDULED_EXECUTOR.schedule(() -> {
             waitToExecutor(getMode());
             return mTask.call();
@@ -97,17 +109,18 @@ public class BatchTask<Respond extends Serializable> {
     private void waitToExecutor(BatchTask.BatchMode mode) {
         if (mode == BatchTask.BatchMode.INSERT) return;
         while (true) {
-            List<BatchTask<?>> insertTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.INSERT);
+            HashMap<BatchMode, LinkedList<BatchTask<? extends Serializable>>> tableTaskMap = BATCH_PRIORITY_MAP.computeIfAbsent(mTableName, key -> new HashMap<>());
+            List<BatchTask<?>> insertTasks = tableTaskMap.get(BatchMode.INSERT);
             boolean insertTaskEmpty = insertTasks == null || insertTasks.isEmpty();
             if (insertTaskEmpty) {
                 if (mode == BatchTask.BatchMode.UPDATE) return;
             }
-            List<BatchTask<?>> updateTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.UPDATE);
+            List<BatchTask<?>> updateTasks = tableTaskMap.get(BatchMode.UPDATE);
             boolean updateTaskEmpty = updateTasks == null || updateTasks.isEmpty();
             if (insertTaskEmpty && updateTaskEmpty) {
                 if (mode == BatchTask.BatchMode.DELETE) return;
             }
-            List<BatchTask<?>> deleteTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.DELETE);
+            List<BatchTask<?>> deleteTasks = tableTaskMap.get(BatchMode.DELETE);
             boolean deleteTaskEmpty = deleteTasks == null || deleteTasks.isEmpty();
             if (insertTaskEmpty && updateTaskEmpty && deleteTaskEmpty) {
                 return;
@@ -125,7 +138,7 @@ public class BatchTask<Respond extends Serializable> {
         Runnable thenRun = () -> {
             try {
                 mRespond = mRespondFuture.get();
-                BATCH_PRIORITY_MAP.get(getMode()).remove(this);
+                BATCH_PRIORITY_MAP.get(mTableName).computeIfAbsent(getMode(), mode -> new LinkedList<>()).remove(this);
                 if (then == null) return;
                 then.then(mRespond);
 //                BATCH_AVAILABLE_MAP.get(getMode()).add(this);

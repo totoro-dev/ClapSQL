@@ -15,12 +15,12 @@ public class SQLCache<Bean extends SQLBean> {
     private final Map<String, List<Bean>> CACHING = new ConcurrentHashMap<>();
     // 用于最久未使用规则的tableFilePath列表表，最久没被访问的tableFile会出现在列表的最后面，清除缓存时优先清除。
     private final LinkedList<String> LRU_KEYS = new LinkedList<>();
-    // 允许缓存中bean数量的最大值
-    private final int maxCachingSize = 0x4f;
+    // 允许缓存中bean数量的最大值 69889
+    private final int maxCachingSize = 0xfffff;
     // 当前缓存中bean的数量
     private int currentCachingSize = 0;
 
-    // changed by dragon 取消不必要的SQLService，解决循环依赖
+    /* changed by dragon 2020/07/18 取消不必要的SQLService，解决循环依赖 */
 //    public SQLCache(SQLService<Bean> sqlService) {
 //        this.sqlService = sqlService;
 //    }

@@ -31,7 +31,8 @@ public class SQLBatch<Bean extends SQLBean> {
     protected static final ScheduledExecutorService SCHEDULED_EXECUTOR
             = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
     // 存储当前存在的所有批处理对象优先级集合，执行批处理任务时需要根据优先级执行
-    protected static final Map<BatchTask.BatchMode, List<BatchTask<? extends Serializable>>> BATCH_PRIORITY_MAP
+    /* changed by dragon 2020/07/18 增加一级map，用来区分不同表的批处理任务，使得各个表之间的任务执行优先级不受影响 */
+    protected static final Map<String, HashMap<BatchTask.BatchMode,LinkedList<BatchTask<? extends Serializable>>>> BATCH_PRIORITY_MAP
             = new ConcurrentHashMap<>();
     // 当前可再利用的批处理空对象
     protected static final Map<BatchTask.BatchMode, List<BatchTask<? extends Serializable>>> BATCH_AVAILABLE_MAP
@@ -48,7 +49,7 @@ public class SQLBatch<Bean extends SQLBean> {
                 return batchTask;
             }
         }
-        return new BatchTask<>();
+        return new BatchTask<>(mode);
     }
 
     /**
@@ -60,7 +61,7 @@ public class SQLBatch<Bean extends SQLBean> {
      */
     public void insertBatch(String tableName, @NotNull List<Bean> beansToInsert, @Nullable BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
-        final BatchTask<Boolean> insertTask = new BatchTask<>(() -> {
+        final BatchTask<Boolean> insertTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "INSERT BATCH");
             // 0)先对所有的bean分表，同一个表的插入只需要一次IO
             Map<File, List<Bean>> batchSubTables = new HashMap<>();
@@ -77,9 +78,8 @@ public class SQLBatch<Bean extends SQLBean> {
             // 1)创建每个分表的批处理任务
             batchSubTables.forEach((file, beans) -> {
                 BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.INSERT, Boolean.class);
-                task.setMode(BatchTask.BatchMode.INSERT);
-                task.setDelay(0);
-                task.setTask(() -> sqlService.insert(file, beans));
+                task.setTableName(tableName);
+                task.setTask(() -> sqlService.insert(tableName, file, beans));
                 task.start().then(null);
             });
             return true;
@@ -94,7 +94,7 @@ public class SQLBatch<Bean extends SQLBean> {
     public void updateBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
                             @NotNull SQLService.Operation<Bean> operation, @Nullable BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
-        final BatchTask<Boolean> selectTask = new BatchTask<>(() -> {
+        final BatchTask<Boolean> selectTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "UPDATE BATCH");
             // 0)查找所有的子表文件
             File[] allSubTableFiles = sqlService.getAllSubTableFile(tableName);
@@ -114,9 +114,9 @@ public class SQLBatch<Bean extends SQLBean> {
                 if (!acceptBeans.isEmpty()) {
                     // 2)为匹配更新条件的beans创建批处理任务
                     BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.UPDATE, Boolean.class);
-                    task.setMode(BatchTask.BatchMode.UPDATE);
+                    task.setTableName(tableName);
                     task.setDelay(10);
-                    task.setTask(() -> sqlService.update(subTableFile, subTableBeans, acceptBeans));
+                    task.setTask(() -> sqlService.update(tableName, subTableFile, subTableBeans, acceptBeans));
                     task.start().then(null);
                 }
             }
@@ -131,7 +131,7 @@ public class SQLBatch<Bean extends SQLBean> {
     public void selectBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
                             @Nullable BatchTask.ThenTask<ArrayList<Bean>> thenTask) {
         long batchStart = new Date().getTime();
-        final BatchTask<ArrayList<Bean>> selectTask = new BatchTask<>(() -> {
+        final BatchTask<ArrayList<Bean>> selectTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "SELECT BATCH");
             return sqlService.selectByCondition(tableName, condition);
         }, BatchTask.BatchMode.SELECT, 10);
@@ -144,7 +144,7 @@ public class SQLBatch<Bean extends SQLBean> {
     public void deleteBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
                             @Nullable BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
-        final BatchTask<Boolean> deleteTask = new BatchTask<>(() -> {
+        final BatchTask<Boolean> deleteTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "DELETE BATCH");
             // 0)查找所有的子表文件
             File[] allSubTableFiles = sqlService.getAllSubTableFile(tableName);
@@ -166,8 +166,7 @@ public class SQLBatch<Bean extends SQLBean> {
                     }
                     // 2)为匹配删除条件的beans创建批处理任务
                     BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.DELETE, Boolean.class);
-                    task.setMode(BatchTask.BatchMode.DELETE);
-                    task.setDelay(0);
+                    task.setTableName(tableName);
                     task.setTask(() -> sqlService.delete(subTableFile, subTableBeans, acceptBeans));
                     task.start().then(null);
                 }
@@ -179,32 +178,6 @@ public class SQLBatch<Bean extends SQLBean> {
             Log.d(TAG, "batch delete time = " + (new Date().getTime() - batchStart) + "ms");
             thenTask.then(respond);
         });
-    }
-
-    private void waitToExecutor(BatchTask.BatchMode mode) {
-        if (mode == BatchTask.BatchMode.INSERT) return;
-        while (true) {
-            List<BatchTask<?>> insertTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.INSERT);
-            boolean insertTaskEmpty = insertTasks == null || insertTasks.isEmpty();
-            if (insertTaskEmpty) {
-                if (mode == BatchTask.BatchMode.UPDATE) return;
-            }
-            List<BatchTask<?>> updateTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.UPDATE);
-            boolean updateTaskEmpty = updateTasks == null || updateTasks.isEmpty();
-            if (insertTaskEmpty && updateTaskEmpty) {
-                if (mode == BatchTask.BatchMode.DELETE) return;
-            }
-            List<BatchTask<?>> deleteTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.DELETE);
-            boolean deleteTaskEmpty = deleteTasks == null || deleteTasks.isEmpty();
-            if (insertTaskEmpty && updateTaskEmpty && deleteTaskEmpty) {
-                return;
-            }
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
-        }
     }
 
     private boolean isEmpty(String s) {
