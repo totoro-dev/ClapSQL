@@ -64,7 +64,7 @@ public class SQLTest {
         for (int i = 0; i < 100000; i++) {
             list.add(new TestBean(i + ""));
         }
-        batch.insertBatch(table, list, respond -> Log.d(TAG, "insert into table1 result = " + respond));
+        batch.insertBatch(table, list, respond -> Log.d(TAG, "insert into test1 result = " + respond));
 
         /* 测试批量更新 */
 //        batch.updateBatch(table,
@@ -75,16 +75,16 @@ public class SQLTest {
 //                }, null);
 
         /* 测试批量查找 */
-        batch.selectBatch(table, bean -> Integer.parseInt(bean.key) >= 0, respond -> Log.d(TAG, "select table1 by batch beans size = " + respond.size()));
+        batch.selectBatch(table, bean -> Integer.parseInt(bean.key) >= 0, respond -> Log.d(TAG, "select test1 by batch beans size = " + respond.size()));
 
         /* 测试批量删除 */
 //        batch.deleteBatch(table, bean -> Integer.parseInt(bean.key) >= 0, null);
 
         /* 测试不同表批处理的优先级是否互相影响 */
-        String table2 = "test2";
-        service.createTable(table2);
-        batch.insertBatch(table2, list, respond -> Log.d(TAG, "insert into table2 result = " + respond));
-        batch.selectBatch(table2, bean -> Integer.parseInt(bean.key) >= 0, respond -> Log.d(TAG, "select table2 by batch beans size = " + respond.size()));
+//        String table2 = "test2";
+//        service.createTable(table2);
+//        batch.insertBatch(table2, list, respond -> Log.d(TAG, "insert into test2 result = " + respond));
+//        batch.selectBatch(table2, bean -> Integer.parseInt(bean.key) >= 0, respond -> Log.d(TAG, "select test2 by batch beans size = " + respond.size()));
 
         Log.d(TAG, "wait system in");
         System.in.read();

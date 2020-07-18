@@ -247,7 +247,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             beans.add(row);
             refreshTable(tableFile, beans);
         }
-        sqlCache.putToCaching(tableFile.getAbsolutePath(), row);
+        sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         return true;
     }
 
@@ -265,14 +265,17 @@ public abstract class SQLService<Bean extends SQLBean> {
             return false;
         }
         assert !rows.isEmpty();
-        List<Bean> beans = getTableFileBeans(tableFile);
+        List<Bean> beans = sqlCache.getInCaching(tableFile.getAbsolutePath());
+        if (beans == null) {
+            beans = getTableFileBeans(tableFile);
+        }
         for (Bean row : rows) {
             if (!beans.contains(row)) {
                 beans.add(row);
             }
         }
         refreshTable(tableFile, beans);
-        sqlCache.putToCaching(tableFile.getAbsolutePath(), rows);
+        sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         return true;
     }
 
@@ -290,7 +293,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             List<Bean> beans = getTableFileBeans(tableFile);
             for (Bean tableFileBean : beans) {
                 if (key.equals(tableFileBean.getKey())) {
-                    sqlCache.putToCaching(tableFile.getAbsolutePath(), tableFileBean);
+                    sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
                     return tableFileBean;
                 }
             }
@@ -308,11 +311,16 @@ public abstract class SQLService<Bean extends SQLBean> {
             return allBeans;
         }
         for (File tableFile : tableFiles) {
+            List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
+            if (caching != null) {
+                allBeans.addAll(caching);
+                continue;
+            }
             // 需要一个一个子表的去查找
             List<Bean> beans = getTableFileBeans(tableFile);
             for (Bean tableFileBean : beans) {
                 if (condition.accept(tableFileBean)) {
-                    sqlCache.putToCaching(tableFile.getAbsolutePath(), tableFileBean);
+                    sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
                     allBeans.add(tableFileBean);
                 }
             }
@@ -328,6 +336,11 @@ public abstract class SQLService<Bean extends SQLBean> {
             return allBeans;
         }
         for (File tableFile : tableFiles) {
+            List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
+            if (caching != null) {
+                allBeans.addAll(caching);
+                continue;
+            }
             // 获取全部时，不能在缓存中拿了，因为可能缓存中并不包含一个表的所有内容
             List<Bean> beans = getTableFileBeans(tableFile);
             sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
@@ -359,7 +372,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             }
             caching.addAll(acceptBeans);
         } else {
-            sqlCache.putToCaching(tableFile.getAbsolutePath(), acceptBeans);
+            sqlCache.putToCaching(tableFile.getAbsolutePath(), allBeans);
         }
         return true;
     }
@@ -378,24 +391,33 @@ public abstract class SQLService<Bean extends SQLBean> {
                     " because of table " + tableName + " has not created, please ensure table has created!");
             return false;
         }
-        List<Bean> beans = getTableFileBeans(tableFile);
-        int index = beans.indexOf(update);
-        if (index < 0) {
-            // 表中不存在要更新的主键
-            Log.e(TAG, "update " + tableName + " by key = " + update.getKey() + " failed," +
-                    " because of the table has not this bean " + update);
-            return false;
-        }
-        Bean old = beans.remove(index);
-        beans.add(update);
-        refreshTable(tableFile, beans);
         List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
         if (caching != null) {
+            int index = caching.indexOf(update);
+            if (index < 0) {
+                // 表中不存在要更新的主键
+                Log.e(TAG, "update " + tableName + " by key = " + update.getKey() + " failed," +
+                        " because of the table has not this bean " + update);
+                return false;
+            }
+            Bean old = caching.remove(index);
             // 需要更新缓存中的这个bean
             caching.remove(old);
             caching.add(update);
+            refreshTable(tableFile, caching);
         } else {
-            sqlCache.putToCaching(tableFile.getAbsolutePath(), update);
+            List<Bean> beans = getTableFileBeans(tableFile);
+            int index = beans.indexOf(update);
+            if (index < 0) {
+                // 表中不存在要更新的主键
+                Log.e(TAG, "update " + tableName + " by key = " + update.getKey() + " failed," +
+                        " because of the table has not this bean " + update);
+                return false;
+            }
+            Bean old = beans.remove(index);
+            beans.add(update);
+            refreshTable(tableFile, beans);
+            sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         }
         return true;
     }
@@ -410,8 +432,11 @@ public abstract class SQLService<Bean extends SQLBean> {
         }
         for (File tableFile : tableFiles) {
             List<Bean> allAcceptBeans = new ArrayList<>();
-            // 需要一个一个子表的去查找
-            List<Bean> beans = getTableFileBeans(tableFile);
+            List<Bean> beans = sqlCache.getInCaching(tableFile.getAbsolutePath());
+            if (beans == null){
+                // 需要去子表中查找
+                beans = getTableFileBeans(tableFile);
+            }
             for (Bean tableFileBean : beans) {
                 if (condition.accept(tableFileBean)) {
                     allAcceptBeans.add(tableFileBean);
@@ -430,7 +455,7 @@ public abstract class SQLService<Bean extends SQLBean> {
                     caching.remove(index);
                     caching.add(acceptBean);
                 } else {
-                    sqlCache.putToCaching(tableFile.getAbsolutePath(), acceptBean);
+                    sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
                 }
             }
             refreshTable(tableFile, beans);

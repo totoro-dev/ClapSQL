@@ -15,8 +15,8 @@ public class SQLCache<Bean extends SQLBean> {
     private final Map<String, List<Bean>> CACHING = new ConcurrentHashMap<>();
     // 用于最久未使用规则的tableFilePath列表表，最久没被访问的tableFile会出现在列表的最后面，清除缓存时优先清除。
     private final LinkedList<String> LRU_KEYS = new LinkedList<>();
-    // 允许缓存中bean数量的最大值 69889
-    private final int maxCachingSize = 0xfffff;
+    // 允许缓存中bean数量的最大值 65536
+    private final int maxCachingSize = 0xf0000;
     // 当前缓存中bean的数量
     private int currentCachingSize = 0;
 
@@ -55,14 +55,16 @@ public class SQLCache<Bean extends SQLBean> {
         List<Bean> cachingList = CACHING.get(tableSubFilePath);
         if (cachingList == null) {
             CACHING.put(tableSubFilePath, listToCaching);
-            currentCachingSize += listToCaching.size();
         } else {
-            for (Bean bean : listToCaching) {
-                if (cachingList.contains(bean)) continue;
-                cachingList.add(bean);
-                currentCachingSize++;
-            }
+//            for (Bean bean : listToCaching) {
+//                if (cachingList.contains(bean)) continue;
+//                cachingList.add(bean);
+//                currentCachingSize++;
+//            }
+            currentCachingSize -= cachingList.size();
+            CACHING.replace(tableSubFilePath, listToCaching);
         }
+        currentCachingSize += listToCaching.size();
 //        Log.d("SQLCache", "putToCaching list size = " + listToCaching.size());
         return true;
     }
