@@ -20,11 +20,10 @@ public class SQLCache<Bean extends SQLBean> {
     // 当前缓存中bean的数量
     private int currentCachingSize = 0;
 
-    private SQLService<Bean> sqlService;
-
-    public SQLCache(SQLService<Bean> sqlService) {
-        this.sqlService = sqlService;
-    }
+    // changed by dragon 取消不必要的SQLService，解决循环依赖
+//    public SQLCache(SQLService<Bean> sqlService) {
+//        this.sqlService = sqlService;
+//    }
 
     /**
      * 插入一条缓存数据。

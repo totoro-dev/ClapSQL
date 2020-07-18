@@ -78,7 +78,7 @@ public class SQLTest {
         batch.selectBatch(table, bean->Integer.parseInt(bean.key) >= 0,respond->Log.d(TAG,"select by batch beans size = "+respond.size()));
 
         /* 测试批量删除 */
-        batch.deleteBatch(table, bean -> Integer.parseInt(bean.key) >= 0, null);
+//        batch.deleteBatch(table, bean -> Integer.parseInt(bean.key) >= 0, null);
 
         Log.d(TAG, "wait system in");
         System.in.read();
@@ -128,6 +128,11 @@ public class SQLTest {
             return key;
         }
 
+        @Override
+        public boolean equals(Object obj) {
+            return super.equals(obj);
+        }
+
         public String getName() {
             return name;
         }
@@ -138,8 +143,7 @@ public class SQLTest {
 
         @Override
         boolean isSame(Object another) {
-            if (another == this) return true;
-            return key.equals(((TestBean) another).getKey());
+            return true;
         }
     }
 }

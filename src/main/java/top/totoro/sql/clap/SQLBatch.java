@@ -44,6 +44,7 @@ public class SQLBatch<Bean extends SQLBean> {
         for (BatchTask<?> batchTask : batchTaskList) {
             if (batchTask.getRespond() != null && batchTask.getRespond().getClass().isAssignableFrom(respondType)) {
                 batchTaskList.remove(batchTask);
+                Log.d("SQLBatch","obtain");
                 return batchTask;
             }
         }
@@ -59,108 +60,149 @@ public class SQLBatch<Bean extends SQLBean> {
      */
     public void insertBatch(String tableName, @NotNull List<Bean> beansToInsert, @Nullable BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
-        // 0)先对所有的bean分表，同一个表的插入只需要一次IO
-        Map<File, List<Bean>> batchSubTables = new HashMap<>();
-        File subTableFile;
-        for (Bean bean : beansToInsert) {
-            if (isEmpty(bean.getKey())) {
-                subTableFile = sqlService.getSubTableFileOrCreate(tableName, null);
-            } else {
-                subTableFile = sqlService.getSubTableFileOrCreate(tableName, sqlService.getKeyId(bean.getKey()));
+        final BatchTask<Boolean> insertTask = new BatchTask<>(() -> {
+            Log.d(TAG, "INSERT BATCH");
+            // 0)先对所有的bean分表，同一个表的插入只需要一次IO
+            Map<File, List<Bean>> batchSubTables = new HashMap<>();
+            File subTableFile;
+            for (Bean bean : beansToInsert) {
+                if (isEmpty(bean.getKey())) {
+                    subTableFile = sqlService.getSubTableFileOrCreate(tableName, null);
+                } else {
+                    subTableFile = sqlService.getSubTableFileOrCreate(tableName, sqlService.getKeyId(bean.getKey()));
+                }
+                batchSubTables.computeIfAbsent(subTableFile, key -> new ArrayList<>()).add(bean);
             }
-            batchSubTables.computeIfAbsent(subTableFile, key -> new ArrayList<>()).add(bean);
-        }
-        int size = batchSubTables.size() - 1;
-        // 1)创建每个分表的批处理任务
-        batchSubTables.forEach((file, beans) -> {
-            BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.INSERT, Boolean.class);
-            task.setMode(BatchTask.BatchMode.INSERT);
-            task.setDelay(0);
-            task.setTask(() -> sqlService.insert(file, beans));
-            // 2)开始执行批处理任务
-            i++;
-            if (i == size) {
-                task.start().then(respond -> Log.d(TAG, "batch insert time = " + (new Date().getTime() - batchStart) + "ms"));
-            }
-            task.start().then(thenTask);
+            int size = batchSubTables.size() - 1;
+            // 1)创建每个分表的批处理任务
+            batchSubTables.forEach((file, beans) -> {
+                BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.INSERT, Boolean.class);
+                task.setMode(BatchTask.BatchMode.INSERT);
+                task.setDelay(0);
+                task.setTask(() -> sqlService.insert(file, beans));
+                task.start().then(null);
+            });
+            return true;
+        }, BatchTask.BatchMode.INSERT, 0);
+        // 2)开始执行批处理任务
+        insertTask.start().then(respond->{
+            Log.d(TAG, "batch insert time = " + (new Date().getTime() - batchStart) + "ms");
+            thenTask.then(respond);
         });
     }
 
     public void updateBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
                             @NotNull SQLService.Operation<Bean> operation, @Nullable BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
-        // 0)查找所有的子表文件
-        File[] allSubTableFiles = sqlService.getAllSubTableFile(tableName);
-        if (allSubTableFiles == null) return;
-        // 1)从每个子表文件中找出匹配更新条件的bean，并执行更新操作
-        for (int i = 0; i < allSubTableFiles.length; i++) {
-            File subTableFile = allSubTableFiles[i];
-            List<Bean> subTableBeans = sqlService.getTableFileBeans(subTableFile);
-            List<Bean> acceptBeans = new ArrayList<>();
-            for (Bean bean : subTableBeans) {
-                if (condition.accept(bean)) {
-                    operation.operate(bean);
-                    acceptBeans.add(bean);
+        final BatchTask<Boolean> selectTask = new BatchTask<>(() -> {
+            Log.d(TAG, "UPDATE BATCH");
+            // 0)查找所有的子表文件
+            File[] allSubTableFiles = sqlService.getAllSubTableFile(tableName);
+            if (allSubTableFiles == null) return false;
+            // 1)从每个子表文件中找出匹配更新条件的bean，并执行更新操作
+            for (int i = 0; i < allSubTableFiles.length; i++) {
+                File subTableFile = allSubTableFiles[i];
+                List<Bean> subTableBeans = sqlService.getTableFileBeans(subTableFile);
+                List<Bean> acceptBeans = new ArrayList<>();
+                for (Bean bean : subTableBeans) {
+                    if (condition.accept(bean)) {
+                        operation.operate(bean);
+                        acceptBeans.add(bean);
+                    }
+                }
+                // 只有存在匹配的bean时才添加到待批处理的表中，避免创建大量空的批处理任务
+                if (!acceptBeans.isEmpty()) {
+                    // 2)为匹配更新条件的beans创建批处理任务
+                    BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.UPDATE, Boolean.class);
+                    task.setMode(BatchTask.BatchMode.UPDATE);
+                    task.setDelay(10);
+                    task.setTask(() -> sqlService.update(subTableFile, subTableBeans, acceptBeans));
+                    task.start().then(null);
                 }
             }
-            // 只有存在匹配的bean时才添加到待批处理的表中，避免创建大量空的批处理任务
-            if (!acceptBeans.isEmpty()) {
-                // 2)为匹配更新条件的beans创建批处理任务
-                BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.UPDATE, Boolean.class);
-                task.setMode(BatchTask.BatchMode.UPDATE);
-                task.setDelay(0);
-                task.setTask(() -> sqlService.update(subTableFile, subTableBeans, acceptBeans));
-//                if (i == allSubTableFiles.length - 1) {
-//                    task.start().then(respond -> Log.d(TAG, "batch update time = " + (new Date().getTime() - batchStart) + "ms"));
-//                }
-                task.start().then(thenTask);
-            }
-        }
+            return true;
+        }, BatchTask.BatchMode.SELECT, 10);
+        selectTask.start().then(respond->{
+            Log.d(TAG, "batch update time = " + (new Date().getTime() - batchStart) + "ms");
+            thenTask.then(respond);
+        });
     }
 
     public void selectBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
                             @Nullable BatchTask.ThenTask<ArrayList<Bean>> thenTask) {
         long batchStart = new Date().getTime();
-        Object objTask = obtain(BatchTask.BatchMode.SELECT, ArrayList.class);
-        BatchTask<ArrayList<Bean>> task = (BatchTask<ArrayList<Bean>>) obtain(BatchTask.BatchMode.SELECT, ArrayList.class);
-        task.setMode(BatchTask.BatchMode.SELECT);
-        task.setDelay(0);
-        task.setTask(() -> sqlService.selectByCondition(tableName, condition));
-//        task.start().then(respond -> Log.d(TAG, "batch select time = " + (new Date().getTime() - batchStart) + "ms"));
-        task.start().then(thenTask);
+        final BatchTask<ArrayList<Bean>> selectTask = new BatchTask<>(() -> {
+            Log.d(TAG, "SELECT BATCH");
+            return sqlService.selectByCondition(tableName, condition);
+        }, BatchTask.BatchMode.SELECT, 10);
+        selectTask.start().then(respond -> {
+            Log.d(TAG, "batch select time = " + (new Date().getTime() - batchStart) + "ms");
+            thenTask.then(respond);
+        });
     }
 
     public void deleteBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
                             @Nullable BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
-        // 0)查找所有的子表文件
-        File[] allSubTableFiles = sqlService.getAllSubTableFile(tableName);
-        if (allSubTableFiles == null) return;
-        // 1)从每个子表文件中找出匹配更新条件的bean，并执行更新操作
-        for (int i = 0; i < allSubTableFiles.length; i++) {
-            File subTableFile = allSubTableFiles[i];
-            List<Bean> subTableBeans = sqlService.getTableFileBeans(subTableFile);
-            List<Bean> acceptBeans = new ArrayList<>();
-            for (Bean bean : subTableBeans) {
-                if (condition.accept(bean)) {
-                    acceptBeans.add(bean);
+        final BatchTask<Boolean> deleteTask = new BatchTask<>(() -> {
+            Log.d(TAG, "DELETE BATCH");
+            // 0)查找所有的子表文件
+            File[] allSubTableFiles = sqlService.getAllSubTableFile(tableName);
+            if (allSubTableFiles == null) return false;
+            // 1)从每个子表文件中找出匹配更新条件的bean，并执行更新操作
+            for (int i = 0; i < allSubTableFiles.length; i++) {
+                File subTableFile = allSubTableFiles[i];
+                List<Bean> subTableBeans = sqlService.getTableFileBeans(subTableFile);
+                List<Bean> acceptBeans = new ArrayList<>();
+                for (Bean bean : subTableBeans) {
+                    if (condition.accept(bean)) {
+                        acceptBeans.add(bean);
+                    }
+                }
+                // 只有存在匹配的bean时才添加到待批处理的表中，避免创建大量空的批处理任务
+                if (!acceptBeans.isEmpty()) {
+                    for (Bean acceptBean : acceptBeans) {
+                        subTableBeans.remove(acceptBean);
+                    }
+                    // 2)为匹配删除条件的beans创建批处理任务
+                    BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.DELETE, Boolean.class);
+                    task.setMode(BatchTask.BatchMode.DELETE);
+                    task.setDelay(0);
+                    task.setTask(() -> sqlService.delete(subTableFile, subTableBeans, acceptBeans));
+                    task.start().then(null);
                 }
             }
-            // 只有存在匹配的bean时才添加到待批处理的表中，避免创建大量空的批处理任务
-            if (!acceptBeans.isEmpty()) {
-                for (Bean acceptBean : acceptBeans) {
-                    subTableBeans.remove(acceptBean);
-                }
-                // 2)为匹配删除条件的beans创建批处理任务
-                BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.DELETE, Boolean.class);
-                task.setMode(BatchTask.BatchMode.DELETE);
-                task.setDelay(0);
-                task.setTask(() -> sqlService.delete(subTableFile, subTableBeans, acceptBeans));
-                // 3)执行批处理任务
-                if (i == allSubTableFiles.length - 1) {
-                    task.start().then(respond -> Log.d(TAG, "batch delete time = " + (new Date().getTime() - batchStart) + "ms"));
-                }
-                task.start().then(thenTask);
+            return true;
+        }, BatchTask.BatchMode.DELETE, 0);
+        // 3)执行批处理任务
+        deleteTask.start().then(respond -> {
+            Log.d(TAG, "batch delete time = " + (new Date().getTime() - batchStart) + "ms");
+            thenTask.then(respond);
+        });
+    }
+
+    private void waitToExecutor(BatchTask.BatchMode mode) {
+        if (mode == BatchTask.BatchMode.INSERT) return;
+        while (true) {
+            List<BatchTask<?>> insertTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.INSERT);
+            boolean insertTaskEmpty = insertTasks == null || insertTasks.isEmpty();
+            if (insertTaskEmpty) {
+                if (mode == BatchTask.BatchMode.UPDATE) return;
+            }
+            List<BatchTask<?>> updateTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.UPDATE);
+            boolean updateTaskEmpty = updateTasks == null || updateTasks.isEmpty();
+            if (insertTaskEmpty && updateTaskEmpty) {
+                if (mode == BatchTask.BatchMode.DELETE) return;
+            }
+            List<BatchTask<?>> deleteTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.DELETE);
+            boolean deleteTaskEmpty = deleteTasks == null || deleteTasks.isEmpty();
+            if (insertTaskEmpty && updateTaskEmpty && deleteTaskEmpty) {
+                return;
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                e.printStackTrace();
             }
         }
     }

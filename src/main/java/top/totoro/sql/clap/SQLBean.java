@@ -21,8 +21,11 @@ public abstract class SQLBean implements Serializable {
     abstract String getKey();
 
     @Override
-    public boolean equals(Object obj) {
-        return isSame(obj);
+    public boolean equals(Object another) {
+        if (super.equals(another)) return true;
+        if (getKey() == null || another == null) return false;
+        return isSame(another) &&
+                getKey().equals(((SQLTest.TestBean) another).getKey());
     }
 
     /**

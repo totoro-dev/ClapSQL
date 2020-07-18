@@ -65,6 +65,15 @@ public class BatchTask<Respond extends Serializable> {
         return mRespond;
     }
 
+    public BatchTask() {
+    }
+
+    public BatchTask(Callable<Respond> mTask, BatchMode mMode, long mDelay) {
+        this.mTask = mTask;
+        this.mMode = mMode;
+        this.mDelay = mDelay;
+    }
+
     /* 正式开启批处理，可以链式调用继续异步执行then方法 */
     public BatchTask<Respond> start(Callable<Respond> task, BatchMode mode, long delay) {
         mTask = task;
@@ -78,31 +87,33 @@ public class BatchTask<Respond extends Serializable> {
     public BatchTask<Respond> start() {
         assert mTask != null;
         BATCH_PRIORITY_MAP.computeIfAbsent(getMode(), key -> new LinkedList<>()).add(this);
-        waitToExecutor();
-        mRespondFuture = SCHEDULED_EXECUTOR.schedule(mTask, mDelay, TimeUnit.MILLISECONDS);
+        mRespondFuture = SCHEDULED_EXECUTOR.schedule(() -> {
+            waitToExecutor(getMode());
+            return mTask.call();
+        }, mDelay, TimeUnit.MILLISECONDS);
         return this;
     }
 
-    private void waitToExecutor() {
-        if (getMode() == BatchMode.INSERT) return;
+    private void waitToExecutor(BatchTask.BatchMode mode) {
+        if (mode == BatchTask.BatchMode.INSERT) return;
         while (true) {
-            List<BatchTask<?>> insertTasks = BATCH_PRIORITY_MAP.get(BatchMode.INSERT);
+            List<BatchTask<?>> insertTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.INSERT);
             boolean insertTaskEmpty = insertTasks == null || insertTasks.isEmpty();
             if (insertTaskEmpty) {
-                if (getMode() == BatchMode.UPDATE) return;
+                if (mode == BatchTask.BatchMode.UPDATE) return;
             }
-            List<BatchTask<?>> updateTasks = BATCH_PRIORITY_MAP.get(BatchMode.UPDATE);
+            List<BatchTask<?>> updateTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.UPDATE);
             boolean updateTaskEmpty = updateTasks == null || updateTasks.isEmpty();
-            if (updateTaskEmpty) {
-                if (getMode() == BatchMode.DELETE) return;
+            if (insertTaskEmpty && updateTaskEmpty) {
+                if (mode == BatchTask.BatchMode.DELETE) return;
             }
-            List<BatchTask<?>> deleteTasks = BATCH_PRIORITY_MAP.get(BatchMode.DELETE);
+            List<BatchTask<?>> deleteTasks = BATCH_PRIORITY_MAP.get(BatchTask.BatchMode.DELETE);
             boolean deleteTaskEmpty = deleteTasks == null || deleteTasks.isEmpty();
-            if (deleteTaskEmpty) {
+            if (insertTaskEmpty && updateTaskEmpty && deleteTaskEmpty) {
                 return;
             }
             try {
-                wait(5);
+                Thread.sleep(5);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -111,13 +122,13 @@ public class BatchTask<Respond extends Serializable> {
 
     /* 批处理执行结束后继续异步执行后续任务then */
     public void then(ThenTask<Respond> then) {
-        if (then == null) return;
         Runnable thenRun = () -> {
             try {
                 mRespond = mRespondFuture.get();
                 BATCH_PRIORITY_MAP.get(getMode()).remove(this);
-                BATCH_AVAILABLE_MAP.get(getMode()).add(this);
+                if (then == null) return;
                 then.then(mRespond);
+//                BATCH_AVAILABLE_MAP.get(getMode()).add(this);
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
             }

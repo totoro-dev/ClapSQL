@@ -22,12 +22,9 @@ public abstract class SQLService<Bean extends SQLBean> {
     private final SQLCache<Bean> sqlCache;
     private String tableName;
 
-//    private static final Map<String,>
-
-
     public SQLService(String dbPath) {
         this.dbPath = dbPath;
-        sqlCache = new SQLCache(this);
+        sqlCache = new SQLCache();
     }
 
     /**
@@ -103,7 +100,7 @@ public abstract class SQLService<Bean extends SQLBean> {
      * 如果id为null，则说明不使用分表的规则获取表文件，默认表文件名为'0.tab'
      * 只有数据实体bean真正实现了{@link SQLBean#getKey()}，
      * 才有办法对表拆分出子表，这样id才会有效。
-     * 这个id必须通过{@link top.totoro.service.common.util.IDKit}获取
+     * 这个id必须通过{@link IDKit}获取
      *
      * @param table 表名
      * @param id    关键字段某一行数据的key的唯一id
@@ -394,7 +391,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         return true;
     }
 
-    public boolean delete(File tableFile, List<Bean> subTableBeans, List<Bean> acceptBeans) {
+    protected boolean delete(File tableFile, List<Bean> subTableBeans, List<Bean> acceptBeans) {
         refreshTable(tableFile, subTableBeans);
         List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
         if (caching != null) {
