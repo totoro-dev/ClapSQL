@@ -4,6 +4,7 @@ import java.io.*;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
+
 /**
  * 创建时间 2020/7/8 22:50
  *
@@ -79,6 +80,10 @@ public abstract class SQLService<Bean extends SQLBean> {
      */
     protected LinkedList<Bean> getTableFileBeans(File tableFile) {
         LinkedList<Bean> beanLines = new LinkedList<>();
+        if (tableFile == null) {
+            Log.e(TAG, "getTableFileBeans(tableFile: null) please sure table has created!");
+            return beanLines;
+        }
         try (FileReader reader = new FileReader(tableFile); BufferedReader bufferedReader = new BufferedReader(reader)) {
             String line, row = "";
             // 一行一行的读取数据
@@ -111,7 +116,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         String tableRootPath = dbPath + File.separator + table;
         File tableRootFile = new File(tableRootPath);
         if (!tableRootFile.exists() || !tableRootFile.isDirectory()) {
-            Log.d(TAG, "getSubTableFileOrCreate(table: " + table + "id: " + id + ") failed: parent table not exist, please create table first");
+            Log.e(TAG, "getSubTableFileOrCreate(table: " + table + ", id: " + id + ") failed: parent table not exist, please create table first");
             return null;
         }
 
@@ -232,7 +237,11 @@ public abstract class SQLService<Bean extends SQLBean> {
         } else {
             tableFile = getSubTableFileOrCreate(tableName, getKeyId(row.getKey()));
         }
-        assert tableFile != null;
+        if (tableFile == null) {
+            Log.e(TAG, "insert into " + tableName + " failed," +
+                    " please ensure table has created!");
+            return false;
+        }
         List<Bean> beans = getTableFileBeans(tableFile);
         if (!beans.contains(row)) {
             beans.add(row);
@@ -249,9 +258,13 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param rows
      * @return
      */
-    protected synchronized boolean insert(File tableFile, List<Bean> rows) {
+    protected synchronized boolean insert(String tableName, File tableFile, List<Bean> rows) {
+        if (tableFile == null) {
+            Log.e(TAG, "insert into " + tableName + " failed," +
+                    " please ensure table has created!");
+            return false;
+        }
         assert !rows.isEmpty();
-        assert tableFile != null;
         List<Bean> beans = getTableFileBeans(tableFile);
         for (Bean row : rows) {
             if (!beans.contains(row)) {
@@ -266,6 +279,12 @@ public abstract class SQLService<Bean extends SQLBean> {
     public Bean selectByKey(String tableName, String key) {
         assert key != null;
         File tableFile = getSubTableFile(tableName, getKeyId(key));
+        if (tableFile == null) {
+            Log.e(TAG, "select from " + tableName + " by key = " + key + " failed," +
+                    " because of table " + tableName + " has not created," +
+                    " please ensure table has created!");
+            return null;
+        }
         Bean caching = sqlCache.getInCaching(tableFile.getAbsolutePath(), key);
         if (caching == null) {
             List<Bean> beans = getTableFileBeans(tableFile);
@@ -283,6 +302,11 @@ public abstract class SQLService<Bean extends SQLBean> {
         assert condition != null;
         File[] tableFiles = getAllSubTableFile(tableName);
         ArrayList<Bean> allBeans = new ArrayList<>();
+        if (tableFiles == null) {
+            Log.e(TAG, "select from " + tableName + " by condition failed," +
+                    " because of no target table exist!");
+            return allBeans;
+        }
         for (File tableFile : tableFiles) {
             // 需要一个一个子表的去查找
             List<Bean> beans = getTableFileBeans(tableFile);
@@ -299,6 +323,10 @@ public abstract class SQLService<Bean extends SQLBean> {
     public List<Bean> selectAll(String tableName) {
         File[] tableFiles = getAllSubTableFile(tableName);
         List<Bean> allBeans = new ArrayList<>();
+        if (tableFiles == null) {
+            Log.e(TAG, "select all from " + tableName + " failed, because of no target table exist!");
+            return allBeans;
+        }
         for (File tableFile : tableFiles) {
             // 获取全部时，不能在缓存中拿了，因为可能缓存中并不包含一个表的所有内容
             List<Bean> beans = getTableFileBeans(tableFile);
@@ -316,8 +344,12 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param acceptBeans
      * @return
      */
-    protected boolean update(File tableFile, List<Bean> allBeans, List<Bean> acceptBeans) {
-        assert tableFile != null;
+    protected boolean update(String tableName, File tableFile, List<Bean> allBeans, List<Bean> acceptBeans) {
+        if (tableFile == null) {
+            Log.e(TAG, "update " + tableName + " by batch failed," +
+                    " because of table " + tableName + " has not created, please ensure table has created!");
+            return false;
+        }
         refreshTable(tableFile, allBeans);
         List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
         if (caching != null) {
@@ -335,13 +367,23 @@ public abstract class SQLService<Bean extends SQLBean> {
     public boolean updateByKey(String tableName, Bean update) {
         // 根据主键更新时，bean的key必须确保存在
         assert update != null && update.getKey() != null;
+        if (update == null || update.getKey() == null) {
+            Log.e(TAG, "update " + tableName + " by key failed," +
+                    " because of update bean or bean's key must not be null!");
+            return false;
+        }
         File tableFile = getSubTableFile(tableName, getKeyId(update.getKey()));
-        assert tableFile != null;
+        if (tableFile == null) {
+            Log.e(TAG, "update " + tableName + " by key = " + update.getKey() + " failed," +
+                    " because of table " + tableName + " has not created, please ensure table has created!");
+            return false;
+        }
         List<Bean> beans = getTableFileBeans(tableFile);
         int index = beans.indexOf(update);
         if (index < 0) {
             // 表中不存在要更新的主键
-            Log.e(TAG, "The table has not this bean " + update);
+            Log.e(TAG, "update " + tableName + " by key = " + update.getKey() + " failed," +
+                    " because of the table has not this bean " + update);
             return false;
         }
         Bean old = beans.remove(index);
@@ -361,6 +403,11 @@ public abstract class SQLService<Bean extends SQLBean> {
     public boolean updateByCondition(String tableName, Condition<Bean> condition, Operation<Bean> operation) {
         assert condition != null && operation != null;
         File[] tableFiles = getAllSubTableFile(tableName);
+        if (tableFiles == null) {
+            Log.e(TAG, "update " + tableName + " by condition failed," +
+                    " because of no target table exist!");
+            return false;
+        }
         for (File tableFile : tableFiles) {
             List<Bean> allAcceptBeans = new ArrayList<>();
             // 需要一个一个子表的去查找
@@ -392,6 +439,12 @@ public abstract class SQLService<Bean extends SQLBean> {
     }
 
     protected boolean delete(File tableFile, List<Bean> subTableBeans, List<Bean> acceptBeans) {
+        if (tableFile == null) {
+            Log.e(TAG, "delete " + tableName + " by batch failed," +
+                    " because of table " + tableName + " has not created," +
+                    " please ensure table has created!");
+            return false;
+        }
         refreshTable(tableFile, subTableBeans);
         List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
         if (caching != null) {
@@ -406,7 +459,12 @@ public abstract class SQLService<Bean extends SQLBean> {
     public boolean deleteByKey(String tableName, String key) {
         assert key != null;
         File tableFile = getSubTableFile(tableName, getKeyId(key));
-        assert tableFile != null;
+        if (tableFile == null) {
+            Log.e(TAG, "delete " + tableName + " by key = " + key + " failed," +
+                    " because of table " + tableName + " has not created," +
+                    " please ensure table has created!");
+            return false;
+        }
         List<Bean> beans = getTableFileBeans(tableFile);
         Bean deleteBean = null; // 查找需要删除掉的项
         for (int i = 0; i < beans.size(); i++) {
@@ -431,6 +489,12 @@ public abstract class SQLService<Bean extends SQLBean> {
         assert condition != null;
         File[] tableFiles = getAllSubTableFile(tableName);
         List<Bean> allAcceptBeans = new ArrayList<>();
+        if (tableFiles == null) {
+            Log.e(TAG, "delete " + tableName + " by condition failed," +
+                    " because of table " + tableName + " has not created," +
+                    " please ensure table has created!");
+            return allAcceptBeans;
+        }
         for (File tableFile : tableFiles) {
             // tableFile子表中存在的所有匹配的bean
             List<Bean> acceptBeans = new ArrayList<>();
@@ -459,6 +523,12 @@ public abstract class SQLService<Bean extends SQLBean> {
     public List<Bean> deleteAll(String tableName) {
         File[] tableFiles = getAllSubTableFile(tableName);
         List<Bean> allAcceptBeans = new ArrayList<>();
+        if (tableFiles == null) {
+            Log.e(TAG, "delete all from " + tableName + " failed," +
+                    " because of table " + tableName + " has not created," +
+                    " please ensure table has created!");
+            return allAcceptBeans;
+        }
         for (File tableFile : tableFiles) {
             // tableFile子表中存在的所有匹配的bean
             List<Bean> acceptBeans = new ArrayList<>();
@@ -487,6 +557,12 @@ public abstract class SQLService<Bean extends SQLBean> {
         File table = new File(dbPath + File.separator + tableName + File.separator);
         // 删除所有的子表
         File[] tableFiles = getAllSubTableFile(tableName);
+        if (tableFiles == null) {
+            Log.e(TAG, "drop table " + tableName + " failed," +
+                    " because of table " + tableName + " has not created," +
+                    " please ensure table has created!");
+            return false;
+        }
         if (tableFiles != null) {
             for (File tableFile : tableFiles) {
                 tableFile.delete();
@@ -497,7 +573,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             Log.d(TAG, "drop table name =" + table.getAbsolutePath());
             return table.delete();
         }
-        return false;
+        return true;
     }
 
     // id最多是32位，需要降到16位
