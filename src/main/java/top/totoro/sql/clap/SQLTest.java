@@ -9,18 +9,19 @@ public class SQLTest {
     private static final String TAG = "SQLTest";
 
     public static void main(String[] args) throws IOException {
+        String dbName = "db";
         String table = "test";
         /* 创建数据库服务 */
-        Service service = new Service("D:\\uidq2405\\projects\\ClapSQL\\src\\main\\java\\top\\totoro\\sql\\clap");
+        Service service = new Service(dbName);
         /* 删除test表 */
 //        Log.d(TAG, "delete table " + service.dropTable(table));
         /* 创建test表 */
         service.createTable(table);
 
         /* 测试插入数据 */
-//        for (int i = 0; i < 10000; i++) {
-//            service.insert(table, new TestBean(i + ""));
-//        }
+        for (int i = 0; i < 10000; i++) {
+            service.insert(table, new TestBean(i + ""));
+        }
 //
 //        /* 测试表更新 */
 //        // 按主键更新
@@ -50,7 +51,7 @@ public class SQLTest {
 //        Log.d(TAG, "delete by key > 55 , size = " + service.deleteByCondition(table,
 //                bean -> Integer.parseInt(bean.getKey()) > 55).size());
 //        // 删除全部
-////        Log.d(TAG, "delete all size = " + service.deleteAll(table).size());
+//        Log.d(TAG, "delete all size = " + service.deleteAll(table).size());
 //
 //        // 测试批处理
         SQLBatch<TestBean> batch = new SQLBatch<>(service);
@@ -60,11 +61,11 @@ public class SQLTest {
 //                .then(respond -> Log.d(TAG, "batch respond = " + respond));
 //
 //        /* 测试批量插入 */
-        ArrayList<TestBean> list = new ArrayList<>();
-        for (int i = 0; i < 100000; i++) {
-            list.add(new TestBean(i + ""));
-        }
-        batch.insertBatch(table, list, respond -> Log.d(TAG, "insert into test1 result = " + respond));
+//        ArrayList<TestBean> list = new ArrayList<>();
+//        for (int i = 0; i < 100000; i++) {
+//            list.add(new TestBean(i + ""));
+//        }
+//        batch.insertBatch(table, list, respond -> Log.d(TAG, "insert into test1 result = " + respond));
 
         /* 测试批量更新 */
 //        batch.updateBatch(table,
@@ -75,7 +76,7 @@ public class SQLTest {
 //                }, null);
 
         /* 测试批量查找 */
-        batch.selectBatch(table, bean -> Integer.parseInt(bean.key) >= 0, respond -> Log.d(TAG, "select test1 by batch beans size = " + respond.size()));
+//        batch.selectBatch(table, bean -> Integer.parseInt(bean.key) >= 0, respond -> Log.d(TAG, "select test1 by batch beans size = " + respond.size()));
 
         /* 测试批量删除 */
 //        batch.deleteBatch(table, bean -> Integer.parseInt(bean.key) >= 0, null);
@@ -92,21 +93,19 @@ public class SQLTest {
     }
 
     static class Service extends SQLService<TestBean> {
-        public Service(String dbPath) {
-            super(dbPath);
+        public Service(String dbName) {
+            super(dbName);
         }
 
         private static final Gson GSON = new Gson();
 
         @Override
         String encoderRow(TestBean bean) {
-//            Log.d(TAG, "encoderRow = " + GSON.toJson(bean));
             return GSON.toJson(bean);
         }
 
         @Override
         TestBean decoderRow(String row) {
-//            Log.d(TAG, "decoderRow = " + row);
             return GSON.fromJson(row, TestBean.class);
         }
     }
@@ -134,22 +133,18 @@ public class SQLTest {
             return key;
         }
 
-        @Override
-        public boolean equals(Object obj) {
-            return super.equals(obj);
-        }
-
-        public String getName() {
-            return name;
-        }
-
         public void setName(String name) {
             this.name = name;
+        }
+
+        public String getName(){
+            return name;
         }
 
         @Override
         boolean isSame(Object another) {
             return true;
         }
+
     }
 }

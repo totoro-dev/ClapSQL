@@ -15,7 +15,7 @@ import java.util.List;
 public abstract class SQLService<Bean extends SQLBean> {
     private static final String TAG = "SQLService";
     // 需要根据具体本地环境设置具体的本地数据库的路径
-    private String dbPath = "D:\\训练样本\\resources\\train";    // 数据库路径，以最后一个目录作为数据库名
+    private String dbPath = System.getProperty("user.home") + File.separator +"clap_db"+ File.separator + getClass().getPackage().getName();
     public static final String tableFileSuffix = ".tab";            // 表的文件后缀
     public static final int maxTableFiles = 0xff;                   // 一个表中允许最多多少个子表，用于对key进行分表
     private static final String ROW_END = " ~end";
@@ -23,8 +23,8 @@ public abstract class SQLService<Bean extends SQLBean> {
     private final SQLCache<Bean> sqlCache;
     private String tableName;
 
-    public SQLService(String dbPath) {
-        this.dbPath = dbPath;
+    public SQLService(String dbName) {
+        this.dbPath += File.separator + dbName;
         sqlCache = new SQLCache();
     }
 
@@ -433,7 +433,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         for (File tableFile : tableFiles) {
             List<Bean> allAcceptBeans = new ArrayList<>();
             List<Bean> beans = sqlCache.getInCaching(tableFile.getAbsolutePath());
-            if (beans == null){
+            if (beans == null) {
                 // 需要去子表中查找
                 beans = getTableFileBeans(tableFile);
             }
