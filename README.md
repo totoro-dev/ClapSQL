@@ -6,7 +6,7 @@
  L | Light | 轻量级，不依赖底层系统，无需安装任何依赖，有Java的地方就能跑
  A | Almighty | 全能型，除了基本的CRUD，还具备分表、异步、批处理等能力
  P | Performance | 性能高，内部使用缓存和批处理机制减少IO操作，哈希分表减少单个表文件处理的数据量，快速定位数据
- 其他 | 无 | 数据可加密，管理访问权限，代码逻辑替代SQL语句的编写
+ 其它 | 无 | 数据可加密，管理访问权限，代码逻辑替代SQL语句的编写
  ## 意图
  客户端的开发其实或多或少会使用到数据库，比如应用埋点的数据记录、用户数据的记录等等。
   - 客户端是基本无需考虑高并发带来的数据库压力的，所以大型的数据库根本就用不上；
@@ -110,7 +110,6 @@ public class Test{
         // 按主键更新 : update test set name = 'update(50)' where key = 50;
         service.updateByKey(table, new TestBean("50", "update(50)"));
         // 按条件和操作更新 : update test set name = 'update' where key > 0;
-        long normalStart = new Date().getTime();
         service.updateByCondition(table,
                 /* 相当于SQL语句：‘where key > 0’ */
                 bean -> Integer.parseInt(bean.key) > 0,
