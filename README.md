@@ -172,4 +172,4 @@ public class BatchTest{
 }
 ~~~
 ## 相关文档
-1. [ClapSQL 1.0 API文档](../api-1.0/index.html)
+1. [ClapSQL 1.0 API文档](https://raw.githubusercontent.com/totoro-dev/ClapSQL/api-1.0/index.html)
