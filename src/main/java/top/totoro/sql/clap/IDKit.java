@@ -25,7 +25,7 @@ public class IDKit {
 
     /**
      * 构建一个包含时间信息的唯一id，标志位为2。
-     * 前13位为日期的time，接着是字符串unicode值的后5位
+     * 前13位为日期的time，接着是字符串unicode值的后5位。
      *
      * @param key  关键字段
      * @param time 时间
@@ -40,7 +40,7 @@ public class IDKit {
 
     /**
      * 创建一个带前缀的唯一id，标志位为3。
-     * 前缀占4位，是字符串unicode值的后14位
+     * 前缀占4位，是字符串unicode值的后14位。
      *
      * @param key    关键字段
      * @param prefix 前缀
@@ -61,7 +61,7 @@ public class IDKit {
 
     /**
      * 创建一个带后缀的唯一id，标志位为4。
-     * 后缀占4位，是字符串unicode值的后14位
+     * 后缀占4位，是字符串unicode值的后14位。
      *
      * @param key    关键字段
      * @param suffix 后缀

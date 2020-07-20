@@ -139,3 +139,37 @@ public class Test{
     }
 }
 ~~~
+## 高级用法
+1. 使用批处理优化批量操作
+~~~java
+public class BatchTest{
+    public static void main(String[] args){
+        // 测试批处理
+        SQLBatch<TestBean> batch = new SQLBatch<>(service);
+        /* 测试批量插入 */
+        ArrayList<TestBean> list = new ArrayList<>();
+        for (int i = 0; i < 100000; i++) {
+            list.add(new TestBean(i + ""));
+        }
+        batch.insertBatch(table, list, respond -> System.out.println("insert into test1 result = " + respond));
+
+        /* 测试批量更新 */
+        batch.updateBatch(table,
+                bean -> Integer.parseInt(bean.key) > 0,
+                origin -> {
+                    origin.setName("update by batch");
+                    return origin;
+                }, null);
+
+        /* 测试批量查找 */
+        batch.selectBatch(table, 
+                bean -> Integer.parseInt(bean.key) >= 0, 
+                respond -> System.out.println("select test1 by batch beans size = " + respond.size()));
+        
+        /* 测试批量删除 */
+        batch.deleteBatch(table, bean -> Integer.parseInt(bean.key) >= 0, null);
+    }
+}
+~~~
+## 相关文档
+1. [ClapSQL 1.0 API文档](../api-1.0/index.html)

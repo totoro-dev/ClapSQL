@@ -8,7 +8,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * 数据库的批处理能力。
+ * 数据库的批处理能力，根据自己项目的需要进行使用，默认是不会使用批处理执行数据库操作的。
  * 创建时间 2020/7/15
  *
  * @author dragon
@@ -20,6 +20,11 @@ public class SQLBatch<Bean extends SQLBean> {
     private static final String TAG = "SQLBatch";
     private final SQLService<Bean> sqlService;
 
+    /**
+     * 决定这个批处理对象为那个数据库服务。
+     *
+     * @param sqlService 数据库服务
+     */
     public SQLBatch(SQLService<Bean> sqlService) {
         this.sqlService = sqlService;
     }
@@ -29,7 +34,7 @@ public class SQLBatch<Bean extends SQLBean> {
             = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
     // 存储当前存在的所有批处理对象优先级集合，执行批处理任务时需要根据优先级执行
     /* changed by dragon 2020/07/18 增加一级map，用来区分不同表的批处理任务，使得各个表之间的任务执行优先级不受影响 */
-    protected static final Map<String, HashMap<BatchTask.BatchMode,LinkedList<BatchTask<? extends Serializable>>>> BATCH_PRIORITY_MAP
+    protected static final Map<String, HashMap<BatchTask.BatchMode, LinkedList<BatchTask<? extends Serializable>>>> BATCH_PRIORITY_MAP
             = new ConcurrentHashMap<>();
     // 当前可再利用的批处理空对象
     protected static final Map<BatchTask.BatchMode, List<BatchTask<? extends Serializable>>> BATCH_AVAILABLE_MAP
@@ -42,7 +47,7 @@ public class SQLBatch<Bean extends SQLBean> {
         for (BatchTask<?> batchTask : batchTaskList) {
             if (batchTask.getRespond() != null && batchTask.getRespond().getClass().isAssignableFrom(respondType)) {
                 batchTaskList.remove(batchTask);
-                Log.d("SQLBatch","obtain");
+                Log.d("SQLBatch", "obtain");
                 return batchTask;
             }
         }
@@ -82,12 +87,20 @@ public class SQLBatch<Bean extends SQLBean> {
             return true;
         }, BatchTask.BatchMode.INSERT, 0);
         // 2)开始执行批处理任务
-        insertTask.start().then(respond->{
+        insertTask.start().then(respond -> {
             Log.d(TAG, "batch insert time = " + (new Date().getTime() - batchStart) + "ms");
             thenTask.then(respond);
         });
     }
 
+    /**
+     * 数据库更新的批处理操作。
+     *
+     * @param tableName 数据库表名
+     * @param condition 自定义更新条件
+     * @param operation 匹配更新条件的数据操作
+     * @param thenTask  更新结束后的后续任务
+     */
     public void updateBatch(String tableName, SQLService.Condition<Bean> condition,
                             SQLService.Operation<Bean> operation, BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
@@ -119,12 +132,19 @@ public class SQLBatch<Bean extends SQLBean> {
             }
             return true;
         }, BatchTask.BatchMode.SELECT, 10);
-        selectTask.start().then(respond->{
+        selectTask.start().then(respond -> {
             Log.d(TAG, "batch update time = " + (new Date().getTime() - batchStart) + "ms");
             thenTask.then(respond);
         });
     }
 
+    /**
+     * 批量查询数据。
+     *
+     * @param tableName 查询的数据表名
+     * @param condition 自定义查询条件
+     * @param thenTask  查询后的后续任务
+     */
     public void selectBatch(String tableName, SQLService.Condition<Bean> condition,
                             BatchTask.ThenTask<ArrayList<Bean>> thenTask) {
         long batchStart = new Date().getTime();
@@ -138,6 +158,13 @@ public class SQLBatch<Bean extends SQLBean> {
         });
     }
 
+    /**
+     * 批量删除数据。
+     *
+     * @param tableName 删除数据的表名
+     * @param condition 自定义删除条件
+     * @param thenTask  删除结束后的后续任务
+     */
     public void deleteBatch(String tableName, SQLService.Condition<Bean> condition,
                             BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();

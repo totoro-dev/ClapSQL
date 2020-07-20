@@ -4,6 +4,9 @@ import com.google.gson.Gson;
 
 import java.io.IOException;
 
+/**
+ * 数据库功能的测试。
+ */
 public class SQLTest {
     private static final String TAG = "SQLTest";
 
@@ -52,7 +55,7 @@ public class SQLTest {
 //        // 删除全部
 //        Log.d(TAG, "delete all size = " + service.deleteAll(table).size());
 //
-//        // 测试批处理
+        // 测试批处理
         SQLBatch<TestBean> batch = new SQLBatch<>(service);
 //        /* 测试基本功能 */
 //        SQLBatch.BatchTask<Boolean> task = new SQLBatch.BatchTask<>();
@@ -66,7 +69,7 @@ public class SQLTest {
 //        }
 //        batch.insertBatch(table, list, respond -> Log.d(TAG, "insert into test1 result = " + respond));
 
-        /* 测试批量更新 */
+//        /* 测试批量更新 */
 //        batch.updateBatch(table,
 //                bean -> Integer.parseInt(bean.key) > 0,
 //                origin -> {
@@ -74,10 +77,10 @@ public class SQLTest {
 //                    return origin;
 //                }, null);
 
-        /* 测试批量查找 */
+//        /* 测试批量查找 */
 //        batch.selectBatch(table, bean -> Integer.parseInt(bean.key) >= 0, respond -> Log.d(TAG, "select test1 by batch beans size = " + respond.size()));
 
-        /* 测试批量删除 */
+//        /* 测试批量删除 */
 //        batch.deleteBatch(table, bean -> Integer.parseInt(bean.key) >= 0, null);
 
         /* 测试不同表批处理的优先级是否互相影响 */

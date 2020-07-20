@@ -6,6 +6,8 @@ import java.util.LinkedList;
 import java.util.List;
 
 /**
+ * 基本的数据库服务，每个不同的需求都可以通过继承该类实现不同的服务。
+ * 基础服务是同步方式进行的，如果需要异步批处理的话需要结合{@link SQLBatch}使用。
  * 创建时间 2020/7/8 22:50
  *
  * @author dragon
@@ -15,11 +17,11 @@ import java.util.List;
 public abstract class SQLService<Bean extends SQLBean> {
     private static final String TAG = "SQLService";
     // 需要根据具体本地环境设置具体的本地数据库的路径
-    private String dbPath = System.getProperty("java.io.tmpdir") + File.separator +"clap_db"+ File.separator + getClass().getPackage().getName();
-    public static final String tableFileSuffix = ".tab";            // 表的文件后缀
-    public static final int maxTableFiles = 0xff;                   // 一个表中允许最多多少个子表，用于对key进行分表
+    private String dbPath = System.getProperty("java.io.tmpdir") + File.separator + "clap_db" + File.separator + getClass().getPackage().getName();
+    private static final String tableFileSuffix = ".tab";            // 表的文件后缀
+    private static final int maxTableFiles = 0xff;                   // 一个表中允许最多多少个子表，用于对key进行分表
     private static final String ROW_END = " ~end";
-    public static final String ROW_SEPARATOR = ROW_END + System.getProperty("line.separator");  // 换行符
+    private static final String ROW_SEPARATOR = ROW_END + System.getProperty("line.separator");  // 换行符
     private final SQLCache<Bean> sqlCache;
     private String tableName;
 
@@ -29,7 +31,7 @@ public abstract class SQLService<Bean extends SQLBean> {
     }
 
     /**
-     * 需要不同的需求制定将Bean处理成一个可被存储的字符串，
+     * 需要不同的需求指定将Bean处理成一个可被存储的字符串，
      * 这个字符串必须是可以在获取数据时被解析的。
      *
      * @param bean 需要被编制的实体
@@ -46,14 +48,11 @@ public abstract class SQLService<Bean extends SQLBean> {
     public abstract Bean decoderRow(String line);
 
     /**
-     * 设置该服务所对应的数据库的本地路径
+     * 创建一个表，如果表已经存在则不会重复创建。
      *
-     * @param dbPath 本地路径
+     * @param tableName 创建的表名
+     * @return 是否创建成功或者是否已经存在。
      */
-    public void setDBPath(String dbPath) {
-        dbPath = dbPath;
-    }
-
     public boolean createTable(String tableName) {
         assert tableName != null;
         this.tableName = tableName;
@@ -183,7 +182,6 @@ public abstract class SQLService<Bean extends SQLBean> {
      * 如果id为null，则说明不使用分表的规则获取表文件，默认表文件名为'0.tab'
      *
      * @param table 表名
-     * @param id    关键字段的唯一id
      * @return 存在的子表文件
      */
     protected File[] getAllSubTableFile(String table) {
@@ -228,6 +226,13 @@ public abstract class SQLService<Bean extends SQLBean> {
         }
     }
 
+    /**
+     * 使用同步的方式插入一行数据。
+     *
+     * @param tableName 插入的表名
+     * @param row       插入的数据
+     * @return 是否成功插入
+     */
     public synchronized boolean insert(String tableName, Bean row) {
         assert row != null;
         File tableFile;
@@ -279,6 +284,13 @@ public abstract class SQLService<Bean extends SQLBean> {
         return true;
     }
 
+    /**
+     * 以主键为查找条件，使用同步的方式查找对应的一行数据。
+     *
+     * @param tableName 查找的表名
+     * @param key       查找的主键
+     * @return 一行数据或不存在null
+     */
     public Bean selectByKey(String tableName, String key) {
         assert key != null;
         File tableFile = getSubTableFile(tableName, getKeyId(key));
@@ -301,6 +313,13 @@ public abstract class SQLService<Bean extends SQLBean> {
         return caching;
     }
 
+    /**
+     * 使用自定义的查询条件查找数据集合。
+     *
+     * @param tableName 查找的表名
+     * @param condition 自定义的查询条件
+     * @return 符合查询条件的数据集，不存在则size为0
+     */
     public ArrayList<Bean> selectByCondition(String tableName, Condition<Bean> condition) {
         assert condition != null;
         File[] tableFiles = getAllSubTableFile(tableName);
@@ -328,6 +347,12 @@ public abstract class SQLService<Bean extends SQLBean> {
         return allBeans;
     }
 
+    /**
+     * 使用同步的方式查找整张表的数据集合
+     *
+     * @param tableName 查找的表名
+     * @return 整张表的数据集，或者size为0
+     */
     public List<Bean> selectAll(String tableName) {
         File[] tableFiles = getAllSubTableFile(tableName);
         List<Bean> allBeans = new ArrayList<>();
@@ -377,6 +402,13 @@ public abstract class SQLService<Bean extends SQLBean> {
         return true;
     }
 
+    /**
+     * 以主键为为更新条件，同步的方式更新新的数据。
+     *
+     * @param tableName 更新的表名
+     * @param update    更新后的数据，需要包含正确的主键
+     * @return 是否更新成功
+     */
     public boolean updateByKey(String tableName, Bean update) {
         // 根据主键更新时，bean的key必须确保存在
         assert update != null && update.getKey() != null;
@@ -422,6 +454,14 @@ public abstract class SQLService<Bean extends SQLBean> {
         return true;
     }
 
+    /**
+     * 自定义更新条件和对匹配条件的数据进行的操作。
+     *
+     * @param tableName 更新的表名
+     * @param condition 自定义条件
+     * @param operation 更新操作
+     * @return 是否全部更新成功
+     */
     public boolean updateByCondition(String tableName, Condition<Bean> condition, Operation<Bean> operation) {
         assert condition != null && operation != null;
         File[] tableFiles = getAllSubTableFile(tableName);
@@ -481,6 +521,13 @@ public abstract class SQLService<Bean extends SQLBean> {
         return true;
     }
 
+    /**
+     * 以主键为条件删除指定的一行数据。
+     *
+     * @param tableName 删除数据的表名
+     * @param key       数据的主键值
+     * @return 是否删除成功
+     */
     public boolean deleteByKey(String tableName, String key) {
         assert key != null;
         File tableFile = getSubTableFile(tableName, getKeyId(key));
@@ -510,6 +557,13 @@ public abstract class SQLService<Bean extends SQLBean> {
         return true;
     }
 
+    /**
+     * 自定义删除条件，对匹配的数据行执行删除操作。
+     *
+     * @param tableName 要删除数据的表名
+     * @param condition 自定义删除条件
+     * @return 正确删除的数据集合
+     */
     public List<Bean> deleteByCondition(String tableName, Condition<Bean> condition) {
         assert condition != null;
         File[] tableFiles = getAllSubTableFile(tableName);
@@ -545,6 +599,12 @@ public abstract class SQLService<Bean extends SQLBean> {
         return allAcceptBeans;
     }
 
+    /**
+     * 删除指定的整张表的数据。
+     *
+     * @param tableName 删除的表名
+     * @return 删除了的数据集合
+     */
     public List<Bean> deleteAll(String tableName) {
         File[] tableFiles = getAllSubTableFile(tableName);
         List<Bean> allAcceptBeans = new ArrayList<>();
@@ -577,6 +637,13 @@ public abstract class SQLService<Bean extends SQLBean> {
         return allAcceptBeans;
     }
 
+    /**
+     * 删除掉整个表文件。
+     *
+     * @param tableName 要删除的表名
+     * @return 表目录是否删除，如果目录中存在非数据表的文件则不会删除目录，但表文件会正确删除；
+     * 如果目录不存在其他类型文件，则整个目录删除，返回true。
+     */
     public boolean dropTable(String tableName) {
         System.gc();
         File table = new File(dbPath + File.separator + tableName + File.separator);
@@ -607,6 +674,12 @@ public abstract class SQLService<Bean extends SQLBean> {
         return (id ^ (id >>> 16)) & maxTableFiles;
     }
 
+    /**
+     * 获取主键的唯一id
+     *
+     * @param key 主键的值
+     * @return 主键的唯一id
+     */
     public Long getKeyId(String key) {
         return IDKit.getUniqueID(key);
     }

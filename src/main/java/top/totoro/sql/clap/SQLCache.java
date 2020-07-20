@@ -4,8 +4,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * 处理数据的缓存。
- * 避免过多的I/O
+ * 处理数据的缓存，避免过多的I/O，使用的算法是LRU最近最久未使用算法。
  *
  * @author dargon
  * @version 1.0
@@ -32,7 +31,7 @@ public class SQLCache<Bean extends SQLBean> {
      * @param beanToCaching    要插入并缓存的数据
      * @return 插入并缓存成功
      */
-    public boolean putToCaching(String tableSubFilePath, Bean beanToCaching) {
+    protected boolean putToCaching(String tableSubFilePath, Bean beanToCaching) {
         refreshLRU(tableSubFilePath);
         List<Bean> cachingList = CACHING.computeIfAbsent(tableSubFilePath, key -> new ArrayList<>());
         if (cachingList.contains(beanToCaching)) return false;
@@ -49,7 +48,7 @@ public class SQLCache<Bean extends SQLBean> {
      * @param listToCaching    要插入并缓存的所有数据
      * @return 插入并缓存成功
      */
-    public boolean putToCaching(String tableSubFilePath, List<Bean> listToCaching) {
+    protected boolean putToCaching(String tableSubFilePath, List<Bean> listToCaching) {
         assert listToCaching != null && tableSubFilePath != null;
         refreshLRU(tableSubFilePath);
         List<Bean> cachingList = CACHING.get(tableSubFilePath);
@@ -67,11 +66,6 @@ public class SQLCache<Bean extends SQLBean> {
         currentCachingSize += listToCaching.size();
 //        Log.d("SQLCache", "putToCaching list size = " + listToCaching.size());
         return true;
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(maxCachingSize);
     }
 
     private synchronized void refreshLRU(String tableSubFilePath) {
@@ -101,7 +95,7 @@ public class SQLCache<Bean extends SQLBean> {
         }
     }
 
-    public Bean getInCaching(String tableSubFilePath, String key) {
+    protected Bean getInCaching(String tableSubFilePath, String key) {
         List<Bean> caching = getInCaching(tableSubFilePath);
         if (caching == null) return null;
         for (Bean bean : caching) {
@@ -113,7 +107,7 @@ public class SQLCache<Bean extends SQLBean> {
         return null;
     }
 
-    public List<Bean> getInCaching(String tableSubFilePath) {
+    protected List<Bean> getInCaching(String tableSubFilePath) {
         List<Bean> caching = CACHING.get(tableSubFilePath);
         if (caching == null) return null;
         refreshLRU(tableSubFilePath);

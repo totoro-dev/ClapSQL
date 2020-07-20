@@ -13,7 +13,7 @@ import static top.totoro.sql.clap.SQLBatch.BATCH_PRIORITY_MAP;
 import static top.totoro.sql.clap.SQLBatch.SCHEDULED_EXECUTOR;
 
 /**
- * 一个可执行的批处理任务，需要通过obtain获取批处理队列，确保任务优先级。
+ * 一个可执行的批处理任务，可以通过obtain获取批处理任务对象，确保任务优先级。
  * 创建时间 2020/7/16
  *
  * @param <Respond> 批处理任务的返回类型
@@ -23,6 +23,10 @@ import static top.totoro.sql.clap.SQLBatch.SCHEDULED_EXECUTOR;
 public class BatchTask<Respond extends Serializable> {
     private static final String TAG = "BatchTask";
 
+    /**
+     * 批处理任务的执行模式，对用这数据库的增删改查，并且具有任务优先级。
+     * 优先级 ： 插入 》 更新 》 删除 》 查询
+     */
     /* 批处理的模式 */
     public enum BatchMode {
         // 按优先级顺序
@@ -36,10 +40,16 @@ public class BatchTask<Respond extends Serializable> {
     private BatchMode mMode;
     // 从开启任务到真正执行的延迟
     private long mDelay = 0;
-    // 当前任务的执行结果
+    // 当前任务的执行Future
     private ScheduledFuture<Respond> mRespondFuture;
+    // 当前任务的执行结果
     private Respond mRespond;
 
+    /**
+     * 设置该任务执行操作对应的是那张表的表名。
+     *
+     * @param tableName 操作对应的表名
+     */
     public void setTableName(String tableName) {
         this.mTableName = tableName;
     }
@@ -48,6 +58,11 @@ public class BatchTask<Respond extends Serializable> {
         return mTask;
     }
 
+    /**
+     * 设置批处理具体执行的任务
+     *
+     * @param task 异步任务
+     */
     public void setTask(Callable<Respond> task) {
         this.mTask = task;
     }
@@ -56,6 +71,11 @@ public class BatchTask<Respond extends Serializable> {
         return mMode;
     }
 
+    /**
+     * 设置任务的执行模式{@link BatchMode}
+     *
+     * @param mode 执行模式
+     */
     public void setMode(BatchMode mode) {
         this.mMode = mode;
     }
@@ -64,10 +84,20 @@ public class BatchTask<Respond extends Serializable> {
         return mDelay;
     }
 
+    /**
+     * 设置从开启任务到真正执行任务的延迟（ms）
+     *
+     * @param delay 执行延迟
+     */
     public void setDelay(long delay) {
         this.mDelay = delay;
     }
 
+    /**
+     * 获取任务当前的结果
+     *
+     * @return 执行结果，为执行结束之前为空。
+     */
     public Respond getRespond() {
         return mRespond;
     }
@@ -86,6 +116,15 @@ public class BatchTask<Respond extends Serializable> {
         this.mDelay = delay;
     }
 
+    /**
+     * 开启批处理任务，需要直接设置任务参数。
+     *
+     * @param tableName 任务在那个数据库表中执行。
+     * @param task      执行的具体任务，在线程中执行。
+     * @param mode      执行的任务属于那种模式。
+     * @param delay     从开启到尝试执行的延迟时间。
+     * @return 当前任务，可以继续链式调用。
+     */
     /* 正式开启批处理，可以链式调用继续异步执行then方法 */
     public BatchTask<Respond> start(String tableName, Callable<Respond> task, BatchMode mode, long delay) {
         mTableName = tableName;
@@ -95,6 +134,11 @@ public class BatchTask<Respond extends Serializable> {
         return start();
     }
 
+    /**
+     * 开启当前批处理任务
+     *
+     * @return 当前批处理任务，可以继续链式调用
+     */
     /* 正式开启批处理，可以链式调用继续异步执行then方法 */
     public BatchTask<Respond> start() {
         assert mTask != null;
@@ -134,6 +178,12 @@ public class BatchTask<Respond extends Serializable> {
         }
     }
 
+    /**
+     * 当批处理任务的线程执行结束之后，开启新的线程执行指定的后续任务。
+     *
+     * @param then 后续要执行的任务，对于调用者来说都是异步的，
+     *             但是对于批处理来说是同步的，因为后续任务必须到批处理任务结束才会执行。
+     */
     /* 批处理执行结束后继续异步执行后续任务then */
     public void then(ThenTask<Respond> then) {
         Runnable thenRun = () -> {
@@ -150,7 +200,18 @@ public class BatchTask<Respond extends Serializable> {
         SCHEDULED_EXECUTOR.schedule(thenRun, 0, TimeUnit.MICROSECONDS);
     }
 
+    /**
+     * 批处理任务执行结束后要要执行的自定义任务。
+     * 每个不同的需求都可以实现自定义的后续任务，确保数据库操作已完成。
+     *
+     * @param <Respond> 批处理任务的返回结果的类型。
+     */
     public interface ThenTask<Respond> {
+        /**
+         * 在这个方法中获取到批处理任务的执行结果，并实现自己的后续任务。
+         *
+         * @param respond 批处理任务的执行结果。
+         */
         void then(Respond respond);
     }
 }
