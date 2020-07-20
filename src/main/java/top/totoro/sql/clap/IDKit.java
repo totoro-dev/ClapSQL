@@ -1,7 +1,5 @@
 package top.totoro.sql.clap;
 
-import com.sun.istack.internal.NotNull;
-
 import java.util.Date;
 
 /**
@@ -33,7 +31,7 @@ public class IDKit {
      * @param time 时间
      * @return 唯一id
      */
-    public static Long getUniqueIDWithTime(@NotNull String key, @NotNull Date time) {
+    public static Long getUniqueIDWithTime(String key, Date time) {
         String uniqueID = "2" +
                 time.getTime() +
                 getUnicode(key, 5);

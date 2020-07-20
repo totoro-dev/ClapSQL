@@ -9,7 +9,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import static top.totoro.sql.clap.SQLBatch.*;
+import static top.totoro.sql.clap.SQLBatch.BATCH_PRIORITY_MAP;
+import static top.totoro.sql.clap.SQLBatch.SCHEDULED_EXECUTOR;
 
 /**
  * 一个可执行的批处理任务，需要通过obtain获取批处理队列，确保任务优先级。

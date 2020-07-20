@@ -1,8 +1,5 @@
 package top.totoro.sql.clap;
 
-import com.sun.istack.internal.NotNull;
-import com.sun.istack.internal.Nullable;
-
 import java.io.File;
 import java.io.Serializable;
 import java.util.*;
@@ -59,7 +56,7 @@ public class SQLBatch<Bean extends SQLBean> {
      * @param beansToInsert 需要批量插入的数据
      * @param thenTask      写入一次文件后需要执行的任务
      */
-    public void insertBatch(String tableName, @NotNull List<Bean> beansToInsert, @Nullable BatchTask.ThenTask<Boolean> thenTask) {
+    public void insertBatch(String tableName, List<Bean> beansToInsert, BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<Boolean> insertTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "INSERT BATCH");
@@ -91,8 +88,8 @@ public class SQLBatch<Bean extends SQLBean> {
         });
     }
 
-    public void updateBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
-                            @NotNull SQLService.Operation<Bean> operation, @Nullable BatchTask.ThenTask<Boolean> thenTask) {
+    public void updateBatch(String tableName, SQLService.Condition<Bean> condition,
+                            SQLService.Operation<Bean> operation, BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<Boolean> selectTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "UPDATE BATCH");
@@ -128,8 +125,8 @@ public class SQLBatch<Bean extends SQLBean> {
         });
     }
 
-    public void selectBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
-                            @Nullable BatchTask.ThenTask<ArrayList<Bean>> thenTask) {
+    public void selectBatch(String tableName, SQLService.Condition<Bean> condition,
+                            BatchTask.ThenTask<ArrayList<Bean>> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<ArrayList<Bean>> selectTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "SELECT BATCH");
@@ -141,8 +138,8 @@ public class SQLBatch<Bean extends SQLBean> {
         });
     }
 
-    public void deleteBatch(String tableName, @NotNull SQLService.Condition<Bean> condition,
-                            @Nullable BatchTask.ThenTask<Boolean> thenTask) {
+    public void deleteBatch(String tableName, SQLService.Condition<Bean> condition,
+                            BatchTask.ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<Boolean> deleteTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "DELETE BATCH");

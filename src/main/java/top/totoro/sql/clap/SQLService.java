@@ -15,7 +15,7 @@ import java.util.List;
 public abstract class SQLService<Bean extends SQLBean> {
     private static final String TAG = "SQLService";
     // 需要根据具体本地环境设置具体的本地数据库的路径
-    private String dbPath = System.getProperty("user.home") + File.separator +"clap_db"+ File.separator + getClass().getPackage().getName();
+    private String dbPath = System.getProperty("java.io.tmpdir") + File.separator +"clap_db"+ File.separator + getClass().getPackage().getName();
     public static final String tableFileSuffix = ".tab";            // 表的文件后缀
     public static final int maxTableFiles = 0xff;                   // 一个表中允许最多多少个子表，用于对key进行分表
     private static final String ROW_END = " ~end";
@@ -35,7 +35,7 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param bean 需要被编制的实体
      * @return bean可以存储到表中的字符串
      */
-    abstract String encoderRow(Bean bean);
+    public abstract String encoderRow(Bean bean);
 
     /**
      * 根据提供的一行数据的字符串，封装成对应的实体。
@@ -43,7 +43,7 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @param line 表中的一行数据的字符串
      * @return 对应数据行的bean
      */
-    abstract Bean decoderRow(String line);
+    public abstract Bean decoderRow(String line);
 
     /**
      * 设置该服务所对应的数据库的本地路径
@@ -616,12 +616,12 @@ public abstract class SQLService<Bean extends SQLBean> {
         return size & (int) id;
     }
 
-    interface Condition<Bean extends SQLBean> {
+    public interface Condition<Bean extends SQLBean> {
         // 条件满足
         boolean accept(Bean bean);
     }
 
-    interface Operation<Bean extends SQLBean> {
+    public interface Operation<Bean extends SQLBean> {
         Bean operate(Bean origin);
     }
 }

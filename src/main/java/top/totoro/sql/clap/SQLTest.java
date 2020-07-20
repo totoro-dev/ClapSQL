@@ -3,7 +3,6 @@ package top.totoro.sql.clap;
 import com.google.gson.Gson;
 
 import java.io.IOException;
-import java.util.ArrayList;
 
 public class SQLTest {
     private static final String TAG = "SQLTest";
@@ -100,12 +99,12 @@ public class SQLTest {
         private static final Gson GSON = new Gson();
 
         @Override
-        String encoderRow(TestBean bean) {
+        public String encoderRow(TestBean bean) {
             return GSON.toJson(bean);
         }
 
         @Override
-        TestBean decoderRow(String row) {
+        public TestBean decoderRow(String row) {
             return GSON.fromJson(row, TestBean.class);
         }
     }
@@ -129,7 +128,7 @@ public class SQLTest {
         }
 
         @Override
-        String getKey() {
+        public String getKey() {
             return key;
         }
 
@@ -137,12 +136,12 @@ public class SQLTest {
             this.name = name;
         }
 
-        public String getName(){
+        public String getName() {
             return name;
         }
 
         @Override
-        boolean isSame(Object another) {
+        public boolean isSame(Object another) {
             return true;
         }
 

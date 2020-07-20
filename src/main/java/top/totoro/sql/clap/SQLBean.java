@@ -11,14 +11,14 @@ public abstract class SQLBean implements Serializable {
      *
      * @param key 主键
      */
-    abstract void setKey(String key);
+    public abstract void setKey(String key);
 
     /**
      * 如果有需要用到关键字段的话需要给该方法返回一行数据的关键字段。
      *
      * @return 一行的关键字段
      */
-    abstract String getKey();
+    public abstract String getKey();
 
     @Override
     public boolean equals(Object another) {
@@ -34,6 +34,6 @@ public abstract class SQLBean implements Serializable {
      * @param another 另一个bean
      * @return 是否相同
      */
-    abstract boolean isSame(Object another);
+    public abstract boolean isSame(Object another);
 
 }
