@@ -30,7 +30,7 @@ public abstract class SQLBean implements Serializable {
         if (super.equals(another)) return true;
         if (getKey() == null || another == null) return false;
         return isSame(another) &&
-                getKey().equals(((SQLTest.TestBean) another).getKey());
+                getKey().equals(((SQLBean) another).getKey());
     }
 
     /**
