@@ -1,5 +1,9 @@
 package top.totoro.sql.clap;
 
+import top.totoro.sql.clap.uitl.Base64;
+import top.totoro.sql.clap.uitl.IDKit;
+import top.totoro.sql.clap.uitl.Log;
+
 import java.io.*;
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -89,7 +93,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             while ((line = bufferedReader.readLine()) != null) {
                 row += line;
                 if (line.endsWith(ROW_END)) {
-                    beanLines.add(decoderRow(row.replace(ROW_END, "")));
+                    beanLines.add(decoderRow(Base64.decode(row.replace(ROW_END, ""))));
                     row = "";
                 }
             }
@@ -216,7 +220,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         StringBuilder newTableInfo = new StringBuilder();
         beansInTable.forEach(b -> {
             if (b == null) return;
-            newTableInfo.append(encoderRow(b) + ROW_SEPARATOR);
+            newTableInfo.append(Base64.encode(encoderRow(b)) + ROW_SEPARATOR);
         });
         try (FileWriter fileWriter = new FileWriter(tableFile, false)) {
             fileWriter.write(newTableInfo.toString());
@@ -332,16 +336,24 @@ public abstract class SQLService<Bean extends SQLBean> {
         for (File tableFile : tableFiles) {
             List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
             if (caching != null) {
-                allBeans.addAll(caching);
+                for (Bean tableFileBean : caching) {
+                    if (condition.accept(tableFileBean)) {
+                        allBeans.add(tableFileBean);
+                    }
+                }
                 continue;
             }
             // 需要一个一个子表的去查找
             List<Bean> beans = getTableFileBeans(tableFile);
+            boolean hasAccepted = false;
             for (Bean tableFileBean : beans) {
                 if (condition.accept(tableFileBean)) {
-                    sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
                     allBeans.add(tableFileBean);
+                    hasAccepted = true;
                 }
+            }
+            if (hasAccepted) {
+                sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
             }
         }
         return allBeans;

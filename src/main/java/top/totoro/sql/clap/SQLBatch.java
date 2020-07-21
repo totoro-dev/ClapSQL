@@ -1,5 +1,10 @@
 package top.totoro.sql.clap;
 
+import top.totoro.sql.clap.batch.BatchMode;
+import top.totoro.sql.clap.batch.BatchTask;
+import top.totoro.sql.clap.batch.ThenTask;
+import top.totoro.sql.clap.uitl.Log;
+
 import java.io.File;
 import java.io.Serializable;
 import java.util.*;
@@ -30,19 +35,19 @@ public class SQLBatch<Bean extends SQLBean> {
     }
 
     // 使用机器的处理器数量创建计划执行的的服务
-    protected static final ScheduledExecutorService SCHEDULED_EXECUTOR
+    public static final ScheduledExecutorService SCHEDULED_EXECUTOR
             = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
     // 存储当前存在的所有批处理对象优先级集合，执行批处理任务时需要根据优先级执行
     /* changed by dragon 2020/07/18 增加一级map，用来区分不同表的批处理任务，使得各个表之间的任务执行优先级不受影响 */
-    protected static final Map<String, HashMap<BatchTask.BatchMode, LinkedList<BatchTask<? extends Serializable>>>> BATCH_PRIORITY_MAP
+    public static final Map<String, HashMap<BatchMode, LinkedList<BatchTask<? extends Serializable>>>> BATCH_PRIORITY_MAP
             = new ConcurrentHashMap<>();
     // 当前可再利用的批处理空对象
-    protected static final Map<BatchTask.BatchMode, List<BatchTask<? extends Serializable>>> BATCH_AVAILABLE_MAP
+    protected static final Map<BatchMode, List<BatchTask<? extends Serializable>>> BATCH_AVAILABLE_MAP
             = new ConcurrentHashMap<>();
 
     private int i = 0;
 
-    private synchronized BatchTask<?> obtain(BatchTask.BatchMode mode, Class<?> respondType) {
+    private synchronized BatchTask<?> obtain(BatchMode mode, Class<?> respondType) {
         List<BatchTask<?>> batchTaskList = BATCH_AVAILABLE_MAP.computeIfAbsent(mode, key -> new ArrayList<>());
         for (BatchTask<?> batchTask : batchTaskList) {
             if (batchTask.getRespond() != null && batchTask.getRespond().getClass().isAssignableFrom(respondType)) {
@@ -61,7 +66,7 @@ public class SQLBatch<Bean extends SQLBean> {
      * @param beansToInsert 需要批量插入的数据
      * @param thenTask      写入一次文件后需要执行的任务
      */
-    public void insertBatch(String tableName, List<Bean> beansToInsert, BatchTask.ThenTask<Boolean> thenTask) {
+    public void insertBatch(String tableName, List<Bean> beansToInsert, ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<Boolean> insertTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "INSERT BATCH");
@@ -79,13 +84,13 @@ public class SQLBatch<Bean extends SQLBean> {
             int size = batchSubTables.size() - 1;
             // 1)创建每个分表的批处理任务
             batchSubTables.forEach((file, beans) -> {
-                BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.INSERT, Boolean.class);
+                BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchMode.INSERT, Boolean.class);
                 task.setTableName(tableName);
                 task.setTask(() -> sqlService.insert(tableName, file, beans));
                 task.start().then(null);
             });
             return true;
-        }, BatchTask.BatchMode.INSERT, 0);
+        }, BatchMode.INSERT, 0);
         // 2)开始执行批处理任务
         insertTask.start().then(respond -> {
             Log.d(TAG, "batch insert time = " + (new Date().getTime() - batchStart) + "ms");
@@ -102,7 +107,7 @@ public class SQLBatch<Bean extends SQLBean> {
      * @param thenTask  更新结束后的后续任务
      */
     public void updateBatch(String tableName, SQLService.Condition<Bean> condition,
-                            SQLService.Operation<Bean> operation, BatchTask.ThenTask<Boolean> thenTask) {
+                            SQLService.Operation<Bean> operation, ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<Boolean> selectTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "UPDATE BATCH");
@@ -123,7 +128,7 @@ public class SQLBatch<Bean extends SQLBean> {
                 // 只有存在匹配的bean时才添加到待批处理的表中，避免创建大量空的批处理任务
                 if (!acceptBeans.isEmpty()) {
                     // 2)为匹配更新条件的beans创建批处理任务
-                    BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.UPDATE, Boolean.class);
+                    BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchMode.UPDATE, Boolean.class);
                     task.setTableName(tableName);
                     task.setDelay(10);
                     task.setTask(() -> sqlService.update(tableName, subTableFile, subTableBeans, acceptBeans));
@@ -131,7 +136,7 @@ public class SQLBatch<Bean extends SQLBean> {
                 }
             }
             return true;
-        }, BatchTask.BatchMode.SELECT, 10);
+        }, BatchMode.SELECT, 10);
         selectTask.start().then(respond -> {
             Log.d(TAG, "batch update time = " + (new Date().getTime() - batchStart) + "ms");
             thenTask.then(respond);
@@ -146,12 +151,12 @@ public class SQLBatch<Bean extends SQLBean> {
      * @param thenTask  查询后的后续任务
      */
     public void selectBatch(String tableName, SQLService.Condition<Bean> condition,
-                            BatchTask.ThenTask<ArrayList<Bean>> thenTask) {
+                            ThenTask<ArrayList<Bean>> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<ArrayList<Bean>> selectTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "SELECT BATCH");
             return sqlService.selectByCondition(tableName, condition);
-        }, BatchTask.BatchMode.SELECT, 10);
+        }, BatchMode.SELECT, 10);
         selectTask.start().then(respond -> {
             Log.d(TAG, "batch select time = " + (new Date().getTime() - batchStart) + "ms");
             thenTask.then(respond);
@@ -166,7 +171,7 @@ public class SQLBatch<Bean extends SQLBean> {
      * @param thenTask  删除结束后的后续任务
      */
     public void deleteBatch(String tableName, SQLService.Condition<Bean> condition,
-                            BatchTask.ThenTask<Boolean> thenTask) {
+                            ThenTask<Boolean> thenTask) {
         long batchStart = new Date().getTime();
         final BatchTask<Boolean> deleteTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "DELETE BATCH");
@@ -189,14 +194,14 @@ public class SQLBatch<Bean extends SQLBean> {
                         subTableBeans.remove(acceptBean);
                     }
                     // 2)为匹配删除条件的beans创建批处理任务
-                    BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchTask.BatchMode.DELETE, Boolean.class);
+                    BatchTask<Boolean> task = (BatchTask<Boolean>) obtain(BatchMode.DELETE, Boolean.class);
                     task.setTableName(tableName);
                     task.setTask(() -> sqlService.delete(subTableFile, subTableBeans, acceptBeans));
                     task.start().then(null);
                 }
             }
             return true;
-        }, BatchTask.BatchMode.DELETE, 0);
+        }, BatchMode.DELETE, 0);
         // 3)执行批处理任务
         deleteTask.start().then(respond -> {
             Log.d(TAG, "batch delete time = " + (new Date().getTime() - batchStart) + "ms");

@@ -1,5 +1,7 @@
 package top.totoro.sql.clap;
 
+import top.totoro.sql.clap.uitl.Log;
+
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 

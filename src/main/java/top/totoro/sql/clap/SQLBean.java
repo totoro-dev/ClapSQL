@@ -4,10 +4,16 @@ import java.io.Serializable;
 
 /**
  * 每一行数据的实体类，每个数据库服务都需要继承该类并定义自己的数据实体。
+ *
  * @author dragon
  * @version 1.0
  */
 public abstract class SQLBean implements Serializable {
+
+    /**
+     * 每个表的主键字段，除了区分一行数据，还被用来做分表处理。
+     */
+    public String key;
 
     /**
      * 不需要使用分表的话可以不实现该方法，
@@ -16,14 +22,19 @@ public abstract class SQLBean implements Serializable {
      *
      * @param key 主键
      */
-    public abstract void setKey(String key);
+    public void setKey(String key) {
+        this.key = key;
+    }
 
     /**
      * 如果有需要用到关键字段的话需要给该方法返回一行数据的关键字段。
+     * 返回null说明该表不使用分表模式，所有的数据只存储到一个表文件中。
      *
-     * @return 一行的关键字段
+     * @return 一行数据的主键字段值
      */
-    public abstract String getKey();
+    public String getKey() {
+        return key;
+    }
 
     @Override
     public boolean equals(Object another) {
