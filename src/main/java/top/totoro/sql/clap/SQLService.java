@@ -275,7 +275,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         }
         assert !rows.isEmpty();
         List<Bean> beans = sqlCache.getInCaching(tableFile.getAbsolutePath());
-        if (beans == null) {
+        if (beans == null || beans.isEmpty()) {
             beans = getTableFileBeans(tableFile);
         }
         for (Bean row : rows) {
@@ -335,7 +335,10 @@ public abstract class SQLService<Bean extends SQLBean> {
         }
         for (File tableFile : tableFiles) {
             List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-            if (caching != null) {
+            // changed by dragon on 2020/7/23
+            // 如果是由于delete后清除缓存导致caching不为空但是数据量为0时，会导致获取不到数据
+            // 所以这里需要添加isEmpty的判断，其它方法也要注意这个问题
+            if (caching != null && !caching.isEmpty()) {
                 for (Bean tableFileBean : caching) {
                     if (condition.accept(tableFileBean)) {
                         allBeans.add(tableFileBean);
@@ -374,7 +377,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         }
         for (File tableFile : tableFiles) {
             List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-            if (caching != null) {
+            if (caching != null && !caching.isEmpty()) {
                 allBeans.addAll(caching);
                 continue;
             }
@@ -402,7 +405,7 @@ public abstract class SQLService<Bean extends SQLBean> {
         }
         refreshTable(tableFile, allBeans);
         List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-        if (caching != null) {
+        if (caching != null && !caching.isEmpty()) {
             // 需要更新缓存中的这些匹配更新条件的bean
             for (Bean acceptBean : acceptBeans) {
                 caching.remove(acceptBean);
@@ -436,7 +439,7 @@ public abstract class SQLService<Bean extends SQLBean> {
             return false;
         }
         List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-        if (caching != null) {
+        if (caching != null && !caching.isEmpty()) {
             int index = caching.indexOf(update);
             if (index < 0) {
                 // 表中不存在要更新的主键
@@ -485,8 +488,8 @@ public abstract class SQLService<Bean extends SQLBean> {
         for (File tableFile : tableFiles) {
             List<Bean> allAcceptBeans = new ArrayList<>();
             List<Bean> beans = sqlCache.getInCaching(tableFile.getAbsolutePath());
-            if (beans == null) {
-                // 需要去子表中查找
+            if (beans == null || beans.isEmpty()) {
+                // 缓存中没有这个子表的数据，需要去子表中查找
                 beans = getTableFileBeans(tableFile);
             }
             for (Bean tableFileBean : beans) {
