@@ -9,8 +9,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
-import static top.totoro.sql.clap.SQLBatch.BATCH_PRIORITY_MAP;
-import static top.totoro.sql.clap.SQLBatch.SCHEDULED_EXECUTOR;
+import static top.totoro.sql.clap.SQLBatch.*;
 
 /**
  * 一个可执行的批处理任务，可以通过obtain获取批处理任务对象，确保任务优先级。
@@ -179,12 +178,14 @@ public class BatchTask<Respond extends Serializable> {
         Runnable thenRun = () -> {
             try {
                 mRespond = mRespondFuture.get();
-                BATCH_PRIORITY_MAP.get(mTableName).computeIfAbsent(getMode(), mode -> new LinkedList<>()).remove(this);
                 if (then == null) return;
                 then.then(mRespond);
-//                BATCH_AVAILABLE_MAP.get(getMode()).add(this);
             } catch (InterruptedException | ExecutionException e) {
                 e.printStackTrace();
+            } finally {
+                // 在这里移除任务，防止执行过程出现异常后没有正确移除任务，导致优先级低的任务得不到执行
+                BATCH_PRIORITY_MAP.get(mTableName).computeIfAbsent(getMode(), mode -> new LinkedList<>()).remove(this);
+                BATCH_AVAILABLE_MAP.get(getMode()).add(this);
             }
         };
         SCHEDULED_EXECUTOR.schedule(thenRun, 0, TimeUnit.MICROSECONDS);

@@ -42,7 +42,7 @@ public class SQLBatch<Bean extends SQLBean> {
     public static final Map<String, HashMap<BatchMode, LinkedList<BatchTask<? extends Serializable>>>> BATCH_PRIORITY_MAP
             = new ConcurrentHashMap<>();
     // 当前可再利用的批处理空对象
-    protected static final Map<BatchMode, List<BatchTask<? extends Serializable>>> BATCH_AVAILABLE_MAP
+    public static final Map<BatchMode, List<BatchTask<? extends Serializable>>> BATCH_AVAILABLE_MAP
             = new ConcurrentHashMap<>();
 
     private int i = 0;
@@ -52,7 +52,7 @@ public class SQLBatch<Bean extends SQLBean> {
         for (BatchTask<?> batchTask : batchTaskList) {
             if (batchTask.getRespond() != null && batchTask.getRespond().getClass().isAssignableFrom(respondType)) {
                 batchTaskList.remove(batchTask);
-                Log.d("SQLBatch", "obtain");
+                Log.d(this, "obtain mode = " + mode);
                 return batchTask;
             }
         }
@@ -156,7 +156,7 @@ public class SQLBatch<Bean extends SQLBean> {
         final BatchTask<ArrayList<Bean>> selectTask = new BatchTask<>(tableName, () -> {
             Log.d(TAG, "SELECT BATCH");
             return sqlService.selectByCondition(tableName, condition);
-        }, BatchMode.SELECT, 10);
+        }, BatchMode.SELECT, 5);
         selectTask.start().then(respond -> {
             Log.d(TAG, "batch select time = " + (new Date().getTime() - batchStart) + "ms");
             thenTask.then(respond);

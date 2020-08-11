@@ -23,7 +23,8 @@ public abstract class SQLService<Bean extends SQLBean> {
     // 需要根据具体本地环境设置具体的本地数据库的路径
     private String dbPath = System.getProperty("java.io.tmpdir") + File.separator + "clap_db" + File.separator + getClass().getPackage().getName();
     private static final String tableFileSuffix = ".tab";            // 表的文件后缀
-    private static final int maxTableFiles = 0xff;                   // 一个表中允许最多多少个子表，用于对key进行分表
+    private static final int maxTableFiles = 0x3f;                   // 一个表中允许最多多少个子表，用于对key进行分表
+                                                                     // f = 16; 1f = 32; 2f = 32; 3f = 64; 4f = 32; 5f = 64
     private static final String ROW_END = " ~end";
     private static final String ROW_SEPARATOR = ROW_END + System.getProperty("line.separator");  // 换行符
     private final SQLCache<Bean> sqlCache;
@@ -32,6 +33,7 @@ public abstract class SQLService<Bean extends SQLBean> {
     public SQLService(String dbName) {
         this.dbPath += File.separator + dbName;
         sqlCache = new SQLCache();
+        Log.d(this, "db path = " + dbPath);
     }
 
     /**
@@ -702,6 +704,17 @@ public abstract class SQLService<Bean extends SQLBean> {
     static int requestIndex(int size, long id) {
 //        return size & (int) (id & Integer.MAX_VALUE);
         return size & (int) id;
+    }
+
+    /**
+     * 获取一个数据库服务是否具有对当前数据库执行操作的权限
+     *
+     * @param compare 另一个数据库服务
+     * @return true，允许操作该数据库；否则不允许
+     */
+    public boolean getAuthority(SQLService compare) {
+        String curPackage = getClass().getPackage().getName();
+        return compare.getClass().getPackage().getName().contains(curPackage);
     }
 
     public interface Condition<Bean extends SQLBean> {
