@@ -1,5 +1,6 @@
 package top.totoro.sql.clap;
 
+import top.totoro.sql.clap.batch.ThenTask;
 import top.totoro.sql.clap.uitl.Base64;
 import top.totoro.sql.clap.uitl.IDKit;
 import top.totoro.sql.clap.uitl.Log;
@@ -392,12 +393,58 @@ public abstract class SQLService<Bean extends SQLBean> {
     }
 
     /**
+     * 同步方式的不同表之间的嵌套查询，
+     * 在上一个表的查询结果中继续匹配当前表中存在的结果并返回。
+     * 可以将此次的嵌套查询结果作为下一个表的嵌套查询的基础。
+     *
+     * @param tableName  当前嵌套的表名
+     * @param condition  当前嵌套的表的查询条件
+     * @param lastResult 上一个表的查询结果，可以使用其它的查询结果作为输入，不能为空
+     * @return 当前嵌套的查询结果
+     */
+    public List<Bean> selectNest(String tableName, Condition<Bean> condition, List<Bean> lastResult) {
+        List<Bean> allBeans = new ArrayList<>();
+        List<Bean> nestResult = selectByCondition(tableName, condition);
+        // 匹配结果的最大数据量，也就是上一个结果集lastResult和当前表查询结果集nestResult数量的最小值
+        // 可以匹配到该数量的结果时结束剩余部分的匹配，避免其它不必要的匹配过程，提高匹配效率。
+        int maxResultSize;
+        if (nestResult.size() > lastResult.size()) {
+            maxResultSize = lastResult.size();
+            for (Bean nest : nestResult) {
+                for (Bean last : lastResult) {
+                    if (nest.equals(last)) {
+                        allBeans.add(nest);
+                        // 已经达到最大返回结果的数量，不需要继续查找了
+                        if (maxResultSize == allBeans.size()) {
+                            return allBeans;
+                        }
+                    }
+                }
+            }
+        } else {
+            maxResultSize = nestResult.size();
+            for (Bean nest : lastResult) {
+                for (Bean last : nestResult) {
+                    if (nest.equals(last)) {
+                        allBeans.add(nest);
+                        // 已经达到最大返回结果的数量，不需要继续查找了
+                        if (maxResultSize == allBeans.size()) {
+                            return allBeans;
+                        }
+                    }
+                }
+            }
+        }
+        return allBeans;
+    }
+
+    /**
      * 确定子表文件时直接更新表，批处理任务可用。
      *
      * @param tableFile
      * @param allBeans
      * @param acceptBeans
-     * @return
+     * @return 是否更新成功
      */
     protected boolean update(String tableName, File tableFile, List<Bean> allBeans, List<Bean> acceptBeans) {
         if (tableFile == null) {
@@ -698,6 +745,8 @@ public abstract class SQLService<Bean extends SQLBean> {
      * @return 主键的唯一id
      */
     public Long getKeyId(String key) {
+        // 防止IDKit报空指针
+        if (key == null) return 0L;
         return IDKit.getUniqueID(key);
     }
 
