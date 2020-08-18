@@ -255,11 +255,13 @@ public abstract class SQLService<Bean extends SQLBean> {
             return false;
         }
         List<Bean> beans = getTableFileBeans(tableFile);
+        sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         if (!beans.contains(row)) {
             beans.add(row);
             refreshTable(tableFile, beans);
+        } else {
+            return false;
         }
-        sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         return true;
     }
 
