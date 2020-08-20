@@ -186,7 +186,9 @@ public class SQLCache<Bean extends SQLBean> {
         assert listToCaching != null && tableSubFilePath != null;
         List<Bean> cachingList = CACHING.get(tableSubFilePath);
         if (cachingList == null) {
-            CACHING.put(tableSubFilePath, listToCaching);
+            if (!listToCaching.isEmpty()) {
+                CACHING.put(tableSubFilePath, listToCaching);
+            }
         } else {
 //            for (Bean bean : listToCaching) {
 //                if (cachingList.contains(bean)) continue;
@@ -194,7 +196,12 @@ public class SQLCache<Bean extends SQLBean> {
 //                currentCachingSize++;
 //            }
             currentCachingSize -= cachingList.size();
-            CACHING.replace(tableSubFilePath, listToCaching);
+            if (!listToCaching.isEmpty()) {
+                CACHING.replace(tableSubFilePath, listToCaching);
+            } else {
+                LRU_KEYS.remove(tableSubFilePath);
+                CACHING.remove(tableSubFilePath);
+            }
         }
         currentCachingSize += listToCaching.size();
         // 在插入缓存后才去刷新缓存，避免出现超过最大容量的情况

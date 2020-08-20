@@ -45,12 +45,13 @@ public class SQLBatch<Bean extends SQLBean> {
     public static final Map<BatchMode, List<BatchTask<? extends Serializable>>> BATCH_AVAILABLE_MAP
             = new ConcurrentHashMap<>();
 
-    private int i = 0;
-
     private synchronized BatchTask<?> obtain(BatchMode mode, Class<?> respondType) {
         List<BatchTask<?>> batchTaskList = BATCH_AVAILABLE_MAP.computeIfAbsent(mode, key -> new ArrayList<>());
         for (BatchTask<?> batchTask : batchTaskList) {
-            if (batchTask.getRespond() != null && batchTask.getRespond().getClass().isAssignableFrom(respondType)) {
+            if (batchTask != null
+                    && batchTask.isTaskEnd()
+                    && batchTask.getRespond().getClass().isAssignableFrom(respondType)) {
+                batchTask.setTaskEnd(false);
                 batchTaskList.remove(batchTask);
                 Log.d(this, "obtain mode = " + mode);
                 return batchTask;

@@ -1,6 +1,5 @@
 package top.totoro.sql.clap;
 
-import top.totoro.sql.clap.batch.ThenTask;
 import top.totoro.sql.clap.uitl.Base64;
 import top.totoro.sql.clap.uitl.IDKit;
 import top.totoro.sql.clap.uitl.Log;
@@ -8,6 +7,7 @@ import top.totoro.sql.clap.uitl.Log;
 import java.io.*;
 import java.lang.reflect.ParameterizedType;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -262,11 +262,12 @@ public abstract class SQLService<Bean extends SQLBean> {
             return false;
         }
         List<Bean> beans = getTableFileBeans(tableFile);
-        sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         if (!beans.contains(row)) {
             beans.add(row);
             refreshTable(tableFile, beans);
+            sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         } else {
+            sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
             return false;
         }
         return true;
@@ -584,13 +585,8 @@ public abstract class SQLService<Bean extends SQLBean> {
             return false;
         }
         refreshTable(tableFile, subTableBeans);
-        List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-        if (caching != null) {
-            // 需要删除缓存中的这些匹配删除条件的bean
-            for (Bean acceptBean : acceptBeans) {
-                caching.remove(acceptBean);
-            }
-        }
+        // 需要删除缓存中的这些匹配删除条件的bean
+        sqlCache.putToCaching(tableFile.getAbsolutePath(), subTableBeans);
         return true;
     }
 
@@ -621,12 +617,8 @@ public abstract class SQLService<Bean extends SQLBean> {
         beans.remove(deleteBean);
 
         refreshTable(tableFile, beans);
-        // 刷新缓存
-        List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-        if (caching != null) {
-            // 需要删除缓存中的这个bean
-            caching.remove(deleteBean);
-        }
+        // 需要删除缓存中的这些匹配删除条件的bean
+        sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         return true;
     }
 
@@ -661,13 +653,8 @@ public abstract class SQLService<Bean extends SQLBean> {
             if (acceptBeans.isEmpty()) continue;
             refreshTable(tableFile, beans);
             allAcceptBeans.addAll(acceptBeans);
-            List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-            if (caching != null) {
-                for (Bean acceptBean : acceptBeans) {
-                    // 需要删除缓存中的这个bean
-                    caching.remove(acceptBean);
-                }
-            }
+            // 需要删除缓存中的这些匹配删除条件的bean
+            sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         }
         return allAcceptBeans;
     }
@@ -699,13 +686,8 @@ public abstract class SQLService<Bean extends SQLBean> {
             if (acceptBeans.isEmpty()) continue;
             refreshTable(tableFile, beans);
             allAcceptBeans.addAll(acceptBeans);
-            List<Bean> caching = sqlCache.getInCaching(tableFile.getAbsolutePath());
-            if (caching != null) {
-                for (Bean acceptBean : acceptBeans) {
-                    // 需要删除缓存中的这个bean
-                    caching.remove(acceptBean);
-                }
-            }
+            // 需要删除缓存中的这些匹配删除条件的bean
+            sqlCache.putToCaching(tableFile.getAbsolutePath(), beans);
         }
         return allAcceptBeans;
     }
@@ -730,7 +712,10 @@ public abstract class SQLService<Bean extends SQLBean> {
         }
         if (tableFiles != null) {
             for (File tableFile : tableFiles) {
-                tableFile.delete();
+                if (tableFile.delete()) {
+                    // 需要删除缓存中的bean
+                    sqlCache.putToCaching(tableFile.getAbsolutePath(), Collections.emptyList());
+                }
             }
         }
         // 如果目录中存在不是表的文件的话，目录不会被删除

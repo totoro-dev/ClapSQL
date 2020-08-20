@@ -33,6 +33,8 @@ public class BatchTask<Respond extends Serializable> {
     private ScheduledFuture<Respond> mRespondFuture;
     // 当前任务的执行结果
     private Respond mRespond;
+    // 任务是否执行结束
+    private boolean mTaskEnd;
 
     /**
      * 设置该任务执行操作对应的是那张表的表名。
@@ -91,6 +93,14 @@ public class BatchTask<Respond extends Serializable> {
         return mRespond;
     }
 
+    public boolean isTaskEnd() {
+        return mTaskEnd && mRespondFuture.isDone();
+    }
+
+    public void setTaskEnd(boolean taskEnd) {
+        this.mTaskEnd = taskEnd;
+    }
+
     public BatchTask() {
     }
 
@@ -131,6 +141,7 @@ public class BatchTask<Respond extends Serializable> {
     /* 正式开启批处理，可以链式调用继续异步执行then方法 */
     public BatchTask<Respond> start() {
         assert mTask != null;
+        setTaskEnd(false);
         HashMap<BatchMode, LinkedList<BatchTask<? extends Serializable>>> tableTaskMap = BATCH_PRIORITY_MAP.computeIfAbsent(mTableName, key -> new HashMap<>());
         tableTaskMap.computeIfAbsent(getMode(), table -> new LinkedList<>()).add(this);
         mRespondFuture = SCHEDULED_EXECUTOR.schedule(() -> {
@@ -186,6 +197,7 @@ public class BatchTask<Respond extends Serializable> {
                 // 在这里移除任务，防止执行过程出现异常后没有正确移除任务，导致优先级低的任务得不到执行
                 BATCH_PRIORITY_MAP.get(mTableName).computeIfAbsent(getMode(), mode -> new LinkedList<>()).remove(this);
                 BATCH_AVAILABLE_MAP.get(getMode()).add(this);
+                setTaskEnd(true);
             }
         };
         SCHEDULED_EXECUTOR.schedule(thenRun, 0, TimeUnit.MICROSECONDS);
