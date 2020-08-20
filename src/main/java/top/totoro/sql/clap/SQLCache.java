@@ -20,8 +20,8 @@ public class SQLCache<Bean extends SQLBean> {
     private Map<String, List<Bean>> CACHING = new ConcurrentHashMap<>();
     // 用于最久未使用规则的tableFilePath列表表，最久没被访问的tableFile会出现在列表的最后面，清除缓存时优先清除。
     private final LinkedList<String> LRU_KEYS = new LinkedList<>();
-    // 允许缓存中bean数量的最大值 16384
-    private final int maxCachingSize = 0x3fff;
+    // 允许缓存中bean数量的最大值 2048
+    private final int maxCachingSize = 2048;
     // 当前缓存中bean的数量
     private int currentCachingSize = 0;
     // 持久化缓存的路径
@@ -50,6 +50,7 @@ public class SQLCache<Bean extends SQLBean> {
             if (!cacheFile.getParentFile().exists()) {
                 cacheFile.getParentFile().mkdirs();
             }
+            OutputStreamWriter osw = null;
             try {
                 if (!cacheFile.exists()) {
                     cacheFile.createNewFile();
@@ -64,12 +65,19 @@ public class SQLCache<Bean extends SQLBean> {
                     caching.append(file).append(System.getProperty("line.separator", "\n"));
                     caching.append(gson.toJson(beans)).append(System.getProperty("line.separator", "\n"));
                 });
-                OutputStreamWriter osw = new OutputStreamWriter(new FileOutputStream(cacheFile, false), StandardCharsets.UTF_8);
+                osw = new OutputStreamWriter(new FileOutputStream(cacheFile, false), StandardCharsets.UTF_8);
                 osw.write(caching.toString());
-                osw.flush();
-                osw.close();
             } catch (IOException e) {
                 e.printStackTrace();
+            } finally {
+                if (osw != null) {
+                    try {
+                        osw.flush();
+                        osw.close();
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
             }
         }));
     }
@@ -100,21 +108,27 @@ public class SQLCache<Bean extends SQLBean> {
             Gson gson = new Gson();
             int lineNum = 0;
             String filePath = "";
-            // 一行一行的读取数据
+            // 一行一行的读取缓存数据
             while ((line = bufferedReader.readLine()) != null) {
                 if (lineNum % 2 == 0) {
+                    // 0,2,4...行数的都是缓存内容的表路径
                     filePath = line;
                 } else {
+                    // 1,3,5...行数的是对应表的缓存内容
                     line = line.substring(1, line.length() - 1);
+                    // 根据json的特征切分出每一个bean对应的数据字符串
                     String[] parts = line.split(",\\{");
                     LinkedList<Bean> list = new LinkedList<>();
                     for (int i = 0; i < parts.length; i++) {
                         String part = parts[i];
+                        // 恢复在切分字符串时被去除了的部分，否则无法被json正常的解析
                         if (i != 0) part = "{" + part;
                         part = part.trim();
+                        // 生成对应bean类型的数据插入队列中
                         list.add(gson.fromJson(part, beanType));
                         currentCachingSize++;
                     }
+                    // 同步持久化缓存到内存中
                     LRU_KEYS.add(filePath);
                     CACHING.put(filePath, list);
                 }
@@ -140,7 +154,6 @@ public class SQLCache<Bean extends SQLBean> {
     }
 
     public SQLCache() {
-//        loadPersistentCache();
         registerPersistentCache();
     }
 
@@ -152,11 +165,12 @@ public class SQLCache<Bean extends SQLBean> {
      * @return 插入并缓存成功
      */
     protected boolean putToCaching(String tableSubFilePath, Bean beanToCaching) {
-        refreshLRU(tableSubFilePath);
         List<Bean> cachingList = CACHING.computeIfAbsent(tableSubFilePath, key -> new ArrayList<>());
         if (cachingList.contains(beanToCaching)) return false;
         cachingList.add(beanToCaching);
         currentCachingSize++;
+        // 在插入缓存后才去刷新缓存，避免出现超过最大容量的情况
+        refreshLRU(tableSubFilePath);
 //        Log.d("SQLCache", "putToCaching success bean = " + beanToCaching.getKey());
         return true;
     }
@@ -170,7 +184,6 @@ public class SQLCache<Bean extends SQLBean> {
      */
     protected boolean putToCaching(String tableSubFilePath, List<Bean> listToCaching) {
         assert listToCaching != null && tableSubFilePath != null;
-        refreshLRU(tableSubFilePath);
         List<Bean> cachingList = CACHING.get(tableSubFilePath);
         if (cachingList == null) {
             CACHING.put(tableSubFilePath, listToCaching);
@@ -184,6 +197,8 @@ public class SQLCache<Bean extends SQLBean> {
             CACHING.replace(tableSubFilePath, listToCaching);
         }
         currentCachingSize += listToCaching.size();
+        // 在插入缓存后才去刷新缓存，避免出现超过最大容量的情况
+        refreshLRU(tableSubFilePath);
 //        Log.d("SQLCache", "putToCaching list size = " + listToCaching.size());
         return true;
     }
@@ -192,14 +207,15 @@ public class SQLCache<Bean extends SQLBean> {
         LRU_KEYS.remove(tableSubFilePath);
         // 将当前的tableFilePath放到最前的位置，表示是最近使用的
         LRU_KEYS.add(0, tableSubFilePath);
-        resizeInsertCachingMap();
+        resizeCachingMap();
     }
 
     /**
      * 刷新缓存，清除最久未被访问的缓存
      */
-    private void resizeInsertCachingMap() {
-        if (currentCachingSize > maxCachingSize) {
+    private void resizeCachingMap() {
+        // 除了缓存数量超过最大容量 & 缓存的表不小于一张 才执行刷新
+        if (currentCachingSize > maxCachingSize && CACHING.size() > 0) {
             LinkedList<String> copyKeys = new LinkedList<>(LRU_KEYS);
             for (int i = copyKeys.size() - 1; i >= 0 && currentCachingSize > maxCachingSize; i--) {
                 String key = copyKeys.get(i);
@@ -221,6 +237,7 @@ public class SQLCache<Bean extends SQLBean> {
         for (Bean bean : caching) {
             if (key.equals(bean.getKey())) {
                 Log.d("SQLCache", "get from caching success key = " + key);
+                refreshLRU(tableSubFilePath);
                 return bean;
             }
         }
